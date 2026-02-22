@@ -1,0 +1,79 @@
+// Firestore Security Rules
+//
+// Design principles:
+//  - Only room participants (creator + joiner) can read/write room data.
+//  - Signal subcollections inherit the same participant restriction.
+//  - Listing rooms is prohibited — rooms are accessed only by ID.
+//  - Rules are fail-secure: deny by default.
+//
+// Deploy with: firebase deploy --only firestore:rules
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ─── Helper Functions ────────────────────────────────────────────────────
+
+    // Returns true if the authenticated user is a participant of the room.
+    function isParticipant(roomData) {
+      return request.auth != null && (
+        request.auth.uid == roomData.createdBy ||
+        request.auth.uid == roomData.joinedBy
+      );
+    }
+
+    // Returns true if the incoming data only modifies allowed join fields.
+    function isValidJoin() {
+      return request.resource.data.diff(resource.data).affectedKeys()
+        .hasOnly(['joinedBy', 'sessionId', 'startedAt', 'status']);
+    }
+
+    // Returns true if the incoming data only modifies allowed end-call fields.
+    function isValidEnd() {
+      return request.resource.data.diff(resource.data).affectedKeys()
+        .hasOnly(['status', 'endedAt', 'duration', 'recordingUrl']);
+    }
+
+    // ─── Rooms ───────────────────────────────────────────────────────────────
+
+    match /rooms/{roomId} {
+
+      // Read: only participants may read the room document.
+      allow get: if isParticipant(resource.data);
+
+      // Create: authenticated users can create a room where createdBy = their uid.
+      allow create: if request.auth != null
+        && request.resource.data.createdBy == request.auth.uid
+        && request.resource.data.joinedBy == null
+        && request.resource.data.status == 'waiting';
+
+      // Update: participants may update, but only specific fields depending on action.
+      allow update: if isParticipant(resource.data)
+        && (isValidJoin() || isValidEnd());
+
+      // Delete: not permitted — rooms are archived, not deleted.
+      allow delete: if false;
+
+      // ─── Signal Subcollection ──────────────────────────────────────────────
+
+      match /signal/{docId} {
+        allow read, write: if isParticipant(
+          get(/databases/$(database)/documents/rooms/$(roomId)).data
+        );
+
+        // ICE candidate subcollections
+        match /callerCandidates/{candidateId} {
+          allow read, write: if isParticipant(
+            get(/databases/$(database)/documents/rooms/$(roomId)).data
+          );
+        }
+
+        match /calleeCandidates/{candidateId} {
+          allow read, write: if isParticipant(
+            get(/databases/$(database)/documents/rooms/$(roomId)).data
+          );
+        }
+      }
+    }
+  }
+}
