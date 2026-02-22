@@ -87,13 +87,24 @@ export const useWebRTC = ({
   );
 
   // ─── Initialise Media ────────────────────────────────────────────────────
+  // getUserMedia is only available in secure contexts (HTTPS or localhost).
+  // On a phone via http://192.168.x.x:5173 it will be undefined — use HTTPS or a tunnel (e.g. ngrok).
 
   useEffect(() => {
-    let stream: MediaStream;
+    let stream: MediaStream | undefined;
 
     const initMedia = async () => {
+      const gUM = navigator.mediaDevices?.getUserMedia;
+      if (!gUM) {
+        const isSecure = typeof window !== "undefined" && (window.isSecureContext ?? false);
+        const message = !isSecure
+          ? "Camera and microphone require a secure connection (HTTPS). Open this app via https:// or use a tunnel (e.g. ngrok) on your phone."
+          : "This device or browser does not support camera/microphone access.";
+        setCallState({ status: "error", error: message, durationSeconds: 0 });
+        return;
+      }
       try {
-        stream = await navigator.mediaDevices.getUserMedia({
+        stream = await gUM.call(navigator.mediaDevices, {
           video: true,
           audio: true,
         });
@@ -110,7 +121,7 @@ export const useWebRTC = ({
     initMedia();
 
     return () => {
-      stream?.getTracks().forEach((t) => t.stop());
+      stream?.getTracks()?.forEach((t) => t.stop());
     };
   }, []);
 

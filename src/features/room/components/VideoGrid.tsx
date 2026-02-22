@@ -1,13 +1,16 @@
 /**
- * VideoGrid — purely presentational component.
+ * VideoGrid — Google Meet-style video layout with toggleable fullscreen/PiP.
  *
- * Layout:
- *  - Remote video fills the full screen (cover mode).
- *  - Local video is a small PiP overlay in the bottom-right corner.
- *  - Placeholder shown when streams are not yet available.
+ * Behavior:
+ *  - Default: Remote video fullscreen, local video PiP (bottom-right).
+ *  - Click local PiP → Local fullscreen, remote PiP (same position).
+ *  - Click remote PiP → Remote fullscreen, local PiP (same position).
+ *  - Click fullscreen video → Swap to the other stream (if PiP exists).
+ *  - Layout and PiP size/position remain consistent when toggling.
+ *  - Both streams always visible if available (one fullscreen, one PiP).
  */
 
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Spinner } from "../../../components/ui/Spinner";
 
 interface VideoGridProps {
@@ -55,56 +58,91 @@ export const VideoGrid: React.FC<VideoGridProps> = ({
   remoteStream,
   isConnecting,
   remoteUserName,
-}) => (
-  <div className="relative w-full h-full bg-gray-950">
-    {/* Remote video — full canvas */}
-    {remoteStream ? (
-      <VideoElement
-        stream={remoteStream}
-        className="w-full h-full object-cover"
-        aria-label="Remote participant video"
-      />
-    ) : (
-      <div className="w-full h-full flex flex-col items-center justify-center gap-4">
-        {isConnecting ? (
-          <>
-            <Spinner size="lg" />
-            <p className="text-white/60 text-sm">
-              {remoteUserName
-                ? `Waiting for ${remoteUserName} to connect…`
-                : "Connecting…"}
-            </p>
-          </>
-        ) : (
-          <div className="flex flex-col items-center gap-3">
-            <div className="w-20 h-20 rounded-full bg-white/10 flex items-center justify-center">
-              <svg className="w-10 h-10 text-white/30" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
-                  d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-              </svg>
-            </div>
-            <p className="text-white/40 text-sm">Waiting for participant…</p>
-          </div>
-        )}
-      </div>
-    )}
+}) => {
+  const [isLocalPinned, setIsLocalPinned] = useState(false);
 
-    {/* Local video — PiP overlay */}
-    <div
-      className="absolute bottom-24 right-4 w-36 h-24 sm:w-48 sm:h-32 rounded-2xl overflow-hidden border-2 border-white/20 shadow-2xl bg-gray-900"
-      aria-label="Your video preview"
-    >
-      {localStream ? (
-        <VideoElement
-          stream={localStream}
-          muted
-          className="w-full h-full object-cover scale-x-[-1]" // Mirror local video
-        />
-      ) : (
-        <div className="w-full h-full flex items-center justify-center">
-          <Spinner size="sm" />
+  // Toggle between local and remote fullscreen
+  const togglePin = () => {
+    setIsLocalPinned((prev) => !prev);
+  };
+
+  // Determine which stream is fullscreen and which is PiP
+  const fullscreenStream = isLocalPinned ? localStream : remoteStream;
+  const pipStream = isLocalPinned ? remoteStream : localStream;
+  const isFullscreenLocal = isLocalPinned;
+  const isPipLocal = !isLocalPinned;
+
+  // Show placeholder only if no stream is available
+  const hasAnyStream = localStream || remoteStream;
+  const showPlaceholder = !hasAnyStream;
+
+  return (
+    <div className="relative w-full h-full bg-gray-950">
+      {/* Fullscreen video */}
+      {fullscreenStream ? (
+        <div
+          onClick={pipStream ? togglePin : undefined}
+          className={`w-full h-full ${pipStream ? "cursor-pointer" : ""}`}
+        >
+          <VideoElement
+            stream={fullscreenStream}
+            className="w-full h-full object-cover"
+            aria-label={
+              isFullscreenLocal
+                ? "Your video (click to show remote fullscreen)"
+                : "Remote participant video (click to show your video fullscreen)"
+            }
+            muted={isFullscreenLocal}
+          />
+        </div>
+      ) : showPlaceholder ? (
+        <div className="w-full h-full flex flex-col items-center justify-center gap-4">
+          {isConnecting ? (
+            <>
+              <Spinner size="lg" />
+              <p className="text-white/60 text-sm">
+                {remoteUserName
+                  ? `Waiting for ${remoteUserName} to connect…`
+                  : "Connecting…"}
+              </p>
+            </>
+          ) : (
+            <div className="flex flex-col items-center gap-3">
+              <div className="w-20 h-20 rounded-full bg-white/10 flex items-center justify-center">
+                <svg className="w-10 h-10 text-white/30" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
+                    d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                </svg>
+              </div>
+              <p className="text-white/40 text-sm">Waiting for participant…</p>
+            </div>
+          )}
+        </div>
+      ) : null}
+
+      {/* PiP overlay — consistent position and size, always visible if stream exists */}
+      {pipStream && (
+        <div
+          onClick={togglePin}
+          className="absolute bottom-24 right-4 w-36 h-24 sm:w-48 sm:h-32 rounded-2xl overflow-hidden border-2 border-white/20 shadow-2xl bg-gray-900 cursor-pointer hover:border-white/40 transition-all z-10"
+          aria-label={
+            isPipLocal
+              ? "Your video (click to show fullscreen)"
+              : "Remote participant video (click to show fullscreen)"
+          }
+          title={
+            isPipLocal
+              ? "Click to show your video fullscreen"
+              : "Click to show remote video fullscreen"
+          }
+        >
+          <VideoElement
+            stream={pipStream}
+            muted={isPipLocal}
+            className={`w-full h-full object-cover ${isPipLocal ? "scale-x-[-1]" : ""}`}
+          />
         </div>
       )}
     </div>
-  </div>
-);
+  );
+};

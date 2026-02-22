@@ -1,8 +1,6 @@
 /**
  * CallControls — the control bar at the bottom of the call screen.
- *
  * Fully presentational — receives state as props and fires callbacks.
- * Includes: mic toggle, camera toggle, end call, duration timer.
  */
 
 import React from "react";
@@ -14,9 +12,11 @@ interface CallControlsProps {
   durationSeconds: number;
   isRecording: boolean;
   isUploading: boolean;
+  canRecord: boolean;
   onToggleMic: () => void;
   onToggleCamera: () => void;
   onEndCall: () => void;
+  onToggleRecording: () => void;
 }
 
 const formatDuration = (seconds: number): string => {
@@ -29,7 +29,6 @@ const formatDuration = (seconds: number): string => {
   return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
 };
 
-// Icon components (inline SVGs to avoid external icon library dependency)
 const MicOnIcon = () => (
   <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
@@ -73,14 +72,15 @@ export const CallControls: React.FC<CallControlsProps> = ({
   durationSeconds,
   isRecording,
   isUploading,
+  canRecord,
   onToggleMic,
   onToggleCamera,
   onEndCall,
+  onToggleRecording,
 }) => (
-  <div className="absolute bottom-0 left-0 right-0 flex items-center justify-center gap-3 pb-6 pt-4
-    bg-gradient-to-t from-black/80 to-transparent">
-    {/* Duration + Recording Indicator */}
-    <div className="absolute left-4 bottom-8 flex items-center gap-2">
+  <div className="relative flex items-center justify-center gap-3 px-4">
+    {/* Duration + Recording Indicator — left */}
+    <div className="absolute left-4 top-1/2 -translate-y-1/2 flex items-center gap-2">
       <div className="flex items-center gap-1.5 bg-black/40 backdrop-blur-sm rounded-full px-3 py-1">
         <span className="text-white text-sm font-mono">
           {formatDuration(durationSeconds)}
@@ -97,6 +97,33 @@ export const CallControls: React.FC<CallControlsProps> = ({
       </div>
     </div>
 
+    {/* Record Button */}
+    <Button
+      variant="icon"
+      onClick={onToggleRecording}
+      disabled={!canRecord || isRecording}
+      className={isRecording
+        ? "bg-red-600 text-white cursor-not-allowed"
+        : "bg-white/20 hover:bg-white/30 text-white disabled:opacity-40"
+      }
+      aria-label={isRecording ? "Recording in progress" : "Start recording"}
+      title={
+        !canRecord
+          ? "Available once connected"
+          : isRecording
+          ? "Recording in progress"
+          : "Start recording"
+      }
+    >
+      {isRecording ? (
+        <span className="w-3 h-3 rounded-full bg-white animate-pulse" />
+      ) : (
+        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <circle cx="12" cy="12" r="4" strokeWidth={2} />
+          <circle cx="12" cy="12" r="9" strokeWidth={2} />
+        </svg>
+      )}
+    </Button>
     {/* Mic Toggle */}
     <Button
       variant="icon"

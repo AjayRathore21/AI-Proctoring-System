@@ -5,14 +5,11 @@
  *  1. Reads role (caller/callee) and roomId from the URL.
  *  2. Subscribes to the room document for real-time status.
  *  3. Starts the WebRTC session once the room is active.
- *  4. Manages recording lifecycle (start on connection, stop on hang-up).
+ *  4. Recording starts only on explicit button click (not auto).
  *  5. Ends the room in Firestore and navigates back to lobby on hang-up.
- *
- * Components (VideoGrid, CallControls) remain purely presentational.
- * All async logic delegates to useWebRTC, useRoom, useRecording.
  */
 
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState, useCallback } from "react";
 import { useParams, useSearchParams, useNavigate, Navigate } from "react-router-dom";
 import { useWebRTC } from "../../hooks/useWebRTC";
 import { useRoom } from "../../hooks/useRoom";
@@ -31,7 +28,6 @@ export const CallPage: React.FC = () => {
 
   const role = (searchParams.get("role") as "caller" | "callee") ?? "caller";
 
-  // Guard: roomId must be present.
   if (!roomId) return <Navigate to="/lobby" replace />;
 
   const { room, subscribeToRoom, endRoom } = useRoom();
@@ -39,7 +35,6 @@ export const CallPage: React.FC = () => {
 
   const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
   const callStartedRef = useRef(false);
-  const recordingStartedRef = useRef(false);
 
   const {
     localStream,
@@ -63,8 +58,6 @@ export const CallPage: React.FC = () => {
 
   // ─── Start Call ───────────────────────────────────────────────────────────
 
-  // Caller: start immediately after local media is ready.
-  // Callee: start after the room transitions to "active" (creator is waiting).
   useEffect(() => {
     if (callStartedRef.current) return;
 
@@ -78,19 +71,14 @@ export const CallPage: React.FC = () => {
     }
   }, [localStream, role, room?.status, startCall]);
 
-  // ─── Auto-start Recording ─────────────────────────────────────────────────
+  // ─── Recording — manual start on button click ────────────────────────────
 
-  useEffect(() => {
-    if (
-      !recordingStartedRef.current &&
-      callState.status === "connected" &&
-      localStream &&
-      remoteStream
-    ) {
-      recordingStartedRef.current = true;
+  const handleToggleRecording = useCallback(() => {
+    if (recording.isRecording) return;
+    if (localStream && remoteStream) {
       recording.startRecording(localStream, remoteStream);
     }
-  }, [callState.status, localStream, remoteStream, recording]);
+  }, [recording, localStream, remoteStream]);
 
   // ─── Handle End Call ──────────────────────────────────────────────────────
 
@@ -120,6 +108,9 @@ export const CallPage: React.FC = () => {
 
   if (!user) return <Navigate to="/" replace />;
 
+  const canRecord =
+    callState.status === "connected" && !!localStream && !!remoteStream;
+
   return (
     <div className="fixed inset-0 bg-gray-950 flex flex-col">
       {/* Error Overlay */}
@@ -129,21 +120,9 @@ export const CallPage: React.FC = () => {
         </div>
       )}
 
-      {/* Connecting Overlay */}
-      {callState.status === "connecting" && (
-        <div className="absolute inset-0 z-40 flex items-center justify-center
-          bg-gray-950/80 backdrop-blur-sm">
-          <div className="flex flex-col items-center gap-4">
-            <Spinner size="lg" />
-            <p className="text-white/70 text-sm">Establishing secure connection…</p>
-          </div>
-        </div>
-      )}
-
       {/* Uploading Overlay */}
       {recording.isUploading && (
-        <div className="absolute inset-0 z-40 flex items-center justify-center
-          bg-gray-950/80 backdrop-blur-sm">
+        <div className="absolute inset-0 z-40 flex items-center justify-center bg-gray-950/80 backdrop-blur-sm">
           <div className="flex flex-col items-center gap-4">
             <Spinner size="lg" />
             <p className="text-white/70 text-sm">Saving recording…</p>
@@ -151,24 +130,28 @@ export const CallPage: React.FC = () => {
         </div>
       )}
 
-      {/* Video */}
-      <div className="flex-1 relative">
+      {/* Video — flex-1 so controls stay below in flow */}
+      <div className="flex-1 min-h-0 relative">
         <VideoGrid
           localStream={localStream}
           remoteStream={remoteStream}
           isConnecting={callState.status === "connecting"}
         />
+      </div>
 
-        {/* Controls overlay */}
+      {/* Controls in document flow so always visible (minimized or maximized) */}
+      <div className="shrink-0 w-full bg-gradient-to-t from-black/90 to-transparent pt-4 pb-6">
         <CallControls
           isMicEnabled={controls.isMicEnabled}
           isCameraEnabled={controls.isCameraEnabled}
           durationSeconds={callState.durationSeconds}
           isRecording={recording.isRecording}
           isUploading={recording.isUploading}
+          canRecord={canRecord}
           onToggleMic={toggleMic}
           onToggleCamera={toggleCamera}
           onEndCall={handleEndCall}
+          onToggleRecording={handleToggleRecording}
         />
       </div>
 
