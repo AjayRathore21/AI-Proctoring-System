@@ -76,72 +76,82 @@ export const VideoGrid: React.FC<VideoGridProps> = ({
   const hasAnyStream = localStream || remoteStream;
   const showPlaceholder = !hasAnyStream;
 
-  return (
-    <div className="relative w-full h-full bg-gray-950">
-      {/* Fullscreen video */}
-      {fullscreenStream ? (
-        <div
-          onClick={pipStream ? togglePin : undefined}
-          className={`w-full h-full ${pipStream ? "cursor-pointer" : ""}`}
-        >
-          <VideoElement
-            stream={fullscreenStream}
-            className="w-full h-full object-cover"
-            aria-label={
-              isFullscreenLocal
-                ? "Your video (click to show remote fullscreen)"
-                : "Remote participant video (click to show your video fullscreen)"
-            }
-            muted={isFullscreenLocal}
-          />
-        </div>
-      ) : showPlaceholder ? (
-        <div className="w-full h-full flex flex-col items-center justify-center gap-4">
-          {isConnecting ? (
-            <>
-              <Spinner size="lg" />
-              <p className="text-white/60 text-sm">
-                {remoteUserName
-                  ? `Waiting for ${remoteUserName} to connect…`
-                  : "Connecting…"}
-              </p>
-            </>
-          ) : (
-            <div className="flex flex-col items-center gap-3">
-              <div className="w-20 h-20 rounded-full bg-white/10 flex items-center justify-center">
-                <svg className="w-10 h-10 text-white/30" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
-                    d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                </svg>
-              </div>
-              <p className="text-white/40 text-sm">Waiting for participant…</p>
-            </div>
-          )}
-        </div>
-      ) : null}
+  const showSidebar = userRole === "interviewer" && interviewStats;
 
-      {/* PiP overlay — consistent position and size, always visible if stream exists */}
-      {pipStream && (
-        <div
-          onClick={togglePin}
-          className="absolute bottom-24 right-4 w-36 h-24 sm:w-48 sm:h-32 rounded-2xl overflow-hidden border-2 border-white/20 shadow-2xl bg-gray-900 cursor-pointer hover:border-white/40 transition-all z-10"
-          aria-label={
-            isPipLocal
-              ? "Your video (click to show fullscreen)"
-              : "Remote participant video (click to show fullscreen)"
-          }
-          title={
-            isPipLocal
-              ? "Click to show your video fullscreen"
-              : "Click to show remote video fullscreen"
-          }
-        >
-          <VideoElement
-            stream={pipStream}
-            muted={isPipLocal}
-            className={`w-full h-full object-cover ${isPipLocal ? "scale-x-[-1]" : ""}`}
-          />
-        </div>
+  return (
+    <div className="relative w-full h-full bg-gray-950 flex">
+      {/* Main Video Area */}
+      <div className={`relative ${showSidebar ? "flex-1" : "w-full"} bg-gray-950`}>
+        {/* Fullscreen video */}
+        {fullscreenStream ? (
+          <div
+            onClick={pipStream ? togglePin : undefined}
+            className={`w-full h-full ${pipStream ? "cursor-pointer" : ""}`}
+          >
+            <VideoElement
+              stream={fullscreenStream}
+              className="w-full h-full object-cover"
+              aria-label={
+                isFullscreenLocal
+                  ? "Your video (click to show remote fullscreen)"
+                  : "Remote participant video (click to show your video fullscreen)"
+              }
+              muted={isFullscreenLocal}
+            />
+          </div>
+        ) : showPlaceholder ? (
+          <div className="w-full h-full flex flex-col items-center justify-center gap-4">
+            {isConnecting ? (
+              <>
+                <Spinner size="lg" />
+                <p className="text-white/60 text-sm">
+                  {remoteUserName
+                    ? `Waiting for ${remoteUserName} to connect…`
+                    : "Connecting…"}
+                </p>
+              </>
+            ) : (
+              <div className="flex flex-col items-center gap-3">
+                <div className="w-20 h-20 rounded-full bg-white/10 flex items-center justify-center">
+                  <svg className="w-10 h-10 text-white/30" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
+                      d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                  </svg>
+                </div>
+                <p className="text-white/40 text-sm">Waiting for participant…</p>
+              </div>
+            )}
+          </div>
+        ) : null}
+
+        {/* PiP overlay — consistent position and size, always visible if stream exists */}
+        {pipStream && (
+          <div
+            onClick={togglePin}
+            className={`absolute bottom-24 ${showSidebar ? "right-4" : "right-4"} w-36 h-24 sm:w-48 sm:h-32 rounded-2xl overflow-hidden border-2 border-white/20 shadow-2xl bg-gray-900 cursor-pointer hover:border-white/40 transition-all z-10`}
+            aria-label={
+              isPipLocal
+                ? "Your video (click to show fullscreen)"
+                : "Remote participant video (click to show fullscreen)"
+            }
+            title={
+              isPipLocal
+                ? "Click to show your video fullscreen"
+                : "Click to show remote video fullscreen"
+            }
+          >
+            <VideoElement
+              stream={pipStream}
+              muted={isPipLocal}
+              className={`w-full h-full object-cover ${isPipLocal ? "scale-x-[-1]" : ""}`}
+            />
+          </div>
+        )}
+      </div>
+
+      {/* Interview Sidebar - Only visible to interviewers */}
+      {showSidebar && interviewStats && (
+        <InterviewSidebar stats={interviewStats} />
       )}
     </div>
   );

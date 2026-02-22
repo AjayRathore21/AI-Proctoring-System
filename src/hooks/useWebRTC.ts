@@ -161,11 +161,34 @@ export const useWebRTC = ({
   // ─── Hang Up ──────────────────────────────────────────────────────────────
 
   const hangUp = useCallback(() => {
+    // Stop all local media tracks (camera and microphone)
+    if (localStream) {
+      localStream.getTracks().forEach((track) => {
+        track.stop();
+      });
+      setLocalStream(null);
+    }
+
+    // Stop all remote media tracks
+    if (remoteStream) {
+      remoteStream.getTracks().forEach((track) => {
+        track.stop();
+      });
+      setRemoteStream(null);
+    }
+
+    // Close WebRTC connection
     serviceRef.current?.closeConnection();
     serviceRef.current = null;
     stopDurationTimer();
     setCallState((prev) => ({ ...prev, status: "ended" }));
-  }, [stopDurationTimer]);
+    
+    // Reset controls state
+    setControls({
+      isMicEnabled: false,
+      isCameraEnabled: false,
+    });
+  }, [localStream, remoteStream, stopDurationTimer]);
 
   // ─── Media Controls ───────────────────────────────────────────────────────
 
@@ -189,10 +212,25 @@ export const useWebRTC = ({
 
   useEffect(() => {
     return () => {
+      // Stop all local media tracks
+      if (localStream) {
+        localStream.getTracks().forEach((track) => {
+          track.stop();
+        });
+      }
+
+      // Stop all remote media tracks
+      if (remoteStream) {
+        remoteStream.getTracks().forEach((track) => {
+          track.stop();
+        });
+      }
+
+      // Close WebRTC connection
       serviceRef.current?.closeConnection();
       stopDurationTimer();
     };
-  }, [stopDurationTimer]);
+  }, [localStream, remoteStream, stopDurationTimer]);
 
   return {
     localStream,

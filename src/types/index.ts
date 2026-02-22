@@ -6,15 +6,19 @@
 
 // ─── Auth ────────────────────────────────────────────────────────────────────
 
+export type UserRole = "interviewer" | "interviewee";
+
 export interface AppUser {
   uid: string;
   email: string;
   displayName: string | null;
+  role: UserRole;
 }
 
 export interface AuthCredentials {
   email: string;
   password: string;
+  role?: UserRole; // Optional - role is fetched from Firestore after login
 }
 
 export interface RegisterCredentials extends AuthCredentials {
@@ -72,4 +76,30 @@ export interface CallState {
   status: "idle" | "connecting" | "connected" | "ended" | "error";
   error: string | null;
   durationSeconds: number;
+}
+
+// ─── Interview Monitoring ────────────────────────────────────────────────────
+
+export type EventSeverity = "normal" | "warning" | "alert";
+
+export interface EventLogEntry {
+  id: string;
+  timestamp: string; // HH:MM:SS format
+  description: string;
+  severity: EventSeverity;
+  eventType: string;
+}
+
+export interface ItemDetectionCounts {
+  mobilePhone: number;
+  notesBooks: number;
+  extraElectronics: number;
+  smartwatch: number;
+}
+
+export interface InterviewStats {
+  candidateName: string;
+  engagementLevel: number; // 0-100
+  eventLog: EventLogEntry[];
+  itemDetection: ItemDetectionCounts;
 }

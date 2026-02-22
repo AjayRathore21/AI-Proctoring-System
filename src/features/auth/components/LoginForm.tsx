@@ -29,6 +29,7 @@ export const LoginForm: React.FC<LoginFormProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    // Role is fetched from Firestore after login
     onSubmit({ email, password });
   };
 

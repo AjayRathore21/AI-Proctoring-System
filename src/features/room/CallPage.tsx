@@ -36,6 +36,55 @@ export const CallPage: React.FC = () => {
   const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
   const callStartedRef = useRef(false);
 
+  // Default interview stats - can be replaced with real-time data later
+  const [interviewStats] = useState<InterviewStats>({
+    candidateName: user?.role === "interviewer" && room?.joinedBy ? "Interviewee" : "Waiting...",
+    engagementLevel: 98,
+    eventLog: [
+      {
+        id: "1",
+        timestamp: "10:36:01",
+        description: "Mobile phone detected",
+        severity: "normal",
+        eventType: "mobile_phone",
+      },
+      {
+        id: "2",
+        timestamp: "10:36:15",
+        description: "User looking away (5s)",
+        severity: "warning",
+        eventType: "looking_away",
+      },
+      {
+        id: "3",
+        timestamp: "10:37:05",
+        description: "No face detected (10s)",
+        severity: "alert",
+        eventType: "no_face",
+      },
+      {
+        id: "4",
+        timestamp: "10:37:15",
+        description: "Multiple faces detected",
+        severity: "alert",
+        eventType: "multiple_faces",
+      },
+      {
+        id: "5",
+        timestamp: "10:38:02",
+        description: "Papers/notes detected",
+        severity: "normal",
+        eventType: "papers_notes",
+      },
+    ],
+    itemDetection: {
+      mobilePhone: 3,
+      notesBooks: 1,
+      extraElectronics: 0,
+      smartwatch: 0,
+    },
+  });
+
   const {
     localStream,
     callState,
