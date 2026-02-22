@@ -58,7 +58,9 @@ export class WebRTCService {
    * Initialises a new RTCPeerConnection with a callback for when the
    * remote track arrives. Called once at the start of each call side.
    */
-  createPeerConnection(onRemoteTrack: (stream: MediaStream) => void): RTCPeerConnection {
+  createPeerConnection(
+    onRemoteTrack: (stream: MediaStream) => void,
+  ): RTCPeerConnection {
     if (this.pc) {
       console.warn("[WebRTCService] PeerConnection already exists. Reusing.");
       return this.pc;
@@ -75,11 +77,17 @@ export class WebRTCService {
     };
 
     this.pc.onconnectionstatechange = () => {
-      console.log("[WebRTCService] Connection state:", this.pc?.connectionState);
+      console.log(
+        "[WebRTCService] Connection state:",
+        this.pc?.connectionState,
+      );
     };
 
     this.pc.onicegatheringstatechange = () => {
-      console.log("[WebRTCService] ICE gathering state:", this.pc?.iceGatheringState);
+      console.log(
+        "[WebRTCService] ICE gathering state:",
+        this.pc?.iceGatheringState,
+      );
     };
 
     return this.pc;
@@ -91,7 +99,10 @@ export class WebRTCService {
    * negotiated correctly.
    */
   addTracks(localStream: MediaStream): void {
-    if (!this.pc) throw new Error("[WebRTCService] No PeerConnection. Call createPeerConnection first.");
+    if (!this.pc)
+      throw new Error(
+        "[WebRTCService] No PeerConnection. Call createPeerConnection first.",
+      );
     localStream.getTracks().forEach((track) => {
       this.pc!.addTrack(track, localStream);
     });
@@ -118,6 +129,7 @@ export class WebRTCService {
     };
 
     const offer = await this.pc.createOffer();
+    if (!this.pc) return;
     await this.pc.setLocalDescription(offer);
 
     await setDoc(SIGNAL_DOC_PATH(this.roomId), {
@@ -127,11 +139,11 @@ export class WebRTCService {
 
     // Listen for the answer once the callee sets it.
     const unsub = onSnapshot(SIGNAL_DOC_PATH(this.roomId), async (snap) => {
-      if (!snap.exists()) return;
+      if (!snap.exists() || !this.pc) return;
       const data = snap.data();
-      if (data?.answer && !this.pc?.currentRemoteDescription) {
-        await this.pc!.setRemoteDescription(
-          new RTCSessionDescription(data.answer)
+      if (data?.answer && !this.pc.currentRemoteDescription) {
+        await this.pc.setRemoteDescription(
+          new RTCSessionDescription(data.answer),
         );
       }
     });
@@ -149,11 +161,11 @@ export class WebRTCService {
                 candidate: data.candidate,
                 sdpMid: data.sdpMid,
                 sdpMLineIndex: data.sdpMLineIndex,
-              })
+              }),
             );
           }
         });
-      }
+      },
     );
     this.unsubscribers.push(candidatesUnsub);
   }
@@ -179,6 +191,8 @@ export class WebRTCService {
     };
 
     const signalSnap = await getDoc(SIGNAL_DOC_PATH(this.roomId));
+    if (!this.pc) return;
+
     if (!signalSnap.exists() || !signalSnap.data()?.offer) {
       throw new Error("[WebRTCService] No offer found in Firestore.");
     }
@@ -187,6 +201,7 @@ export class WebRTCService {
     await this.pc.setRemoteDescription(new RTCSessionDescription(offer));
 
     const answer = await this.pc.createAnswer();
+    if (!this.pc) return;
     await this.pc.setLocalDescription(answer);
 
     await updateDoc(SIGNAL_DOC_PATH(this.roomId), {
@@ -205,11 +220,11 @@ export class WebRTCService {
                 candidate: data.candidate,
                 sdpMid: data.sdpMid,
                 sdpMLineIndex: data.sdpMLineIndex,
-              })
+              }),
             );
           }
         });
-      }
+      },
     );
     this.unsubscribers.push(candidatesUnsub);
   }

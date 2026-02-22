@@ -10,7 +10,12 @@
  */
 
 import React, { useEffect, useRef, useState, useCallback } from "react";
-import { useParams, useSearchParams, useNavigate, Navigate } from "react-router-dom";
+import {
+  useParams,
+  useSearchParams,
+  useNavigate,
+  Navigate,
+} from "react-router-dom";
 import { useWebRTC } from "../../hooks/useWebRTC";
 import { useRoom } from "../../hooks/useRoom";
 import { useRecording } from "../../hooks/useRecording";
@@ -19,6 +24,7 @@ import { VideoGrid } from "./components/VideoGrid";
 import { CallControls } from "./components/CallControls";
 import { ErrorBanner } from "../../components/ui/ErrorBanner";
 import { Spinner } from "../../components/ui/Spinner";
+import type { InterviewStats } from "../../types";
 
 export const CallPage: React.FC = () => {
   const { roomId } = useParams<{ roomId: string }>();
@@ -38,7 +44,10 @@ export const CallPage: React.FC = () => {
 
   // Default interview stats - can be replaced with real-time data later
   const [interviewStats] = useState<InterviewStats>({
-    candidateName: user?.role === "interviewer" && room?.joinedBy ? "Interviewee" : "Waiting...",
+    candidateName:
+      user?.role === "interviewer" && room?.joinedBy
+        ? "Interviewee"
+        : "Waiting...",
     engagementLevel: 98,
     eventLog: [
       {
@@ -185,6 +194,10 @@ export const CallPage: React.FC = () => {
           localStream={localStream}
           remoteStream={remoteStream}
           isConnecting={callState.status === "connecting"}
+          userRole={user.role}
+          interviewStats={
+            user.role === "interviewer" ? interviewStats : undefined
+          }
         />
       </div>
 
@@ -207,7 +220,9 @@ export const CallPage: React.FC = () => {
       {/* Recording Upload Error */}
       {recording.uploadError && (
         <div className="absolute bottom-24 left-4 right-4 z-50">
-          <ErrorBanner message={`Recording upload failed: ${recording.uploadError}`} />
+          <ErrorBanner
+            message={`Recording upload failed: ${recording.uploadError}`}
+          />
         </div>
       )}
     </div>

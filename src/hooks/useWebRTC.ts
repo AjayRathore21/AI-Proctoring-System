@@ -41,6 +41,8 @@ export const useWebRTC = ({
   onRemoteStream,
 }: UseWebRTCOptions): UseWebRTCReturn => {
   const serviceRef = useRef<WebRTCService | null>(null);
+  const localStreamRef = useRef<MediaStream | null>(null);
+  const remoteStreamRef = useRef<MediaStream | null>(null);
 
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
@@ -83,7 +85,7 @@ export const useWebRTC = ({
       setCallState((prev) => ({ ...prev, status: "connected" }));
       startDurationTimer();
     },
-    [onRemoteStream, startDurationTimer]
+    [onRemoteStream, startDurationTimer],
   );
 
   // ─── Initialise Media ────────────────────────────────────────────────────
@@ -96,7 +98,8 @@ export const useWebRTC = ({
     const initMedia = async () => {
       const gUM = navigator.mediaDevices?.getUserMedia;
       if (!gUM) {
-        const isSecure = typeof window !== "undefined" && (window.isSecureContext ?? false);
+        const isSecure =
+          typeof window !== "undefined" && (window.isSecureContext ?? false);
         const message = !isSecure
           ? "Camera and microphone require a secure connection (HTTPS). Open this app via https:// or use a tunnel (e.g. ngrok) on your phone."
           : "This device or browser does not support camera/microphone access.";
@@ -121,9 +124,20 @@ export const useWebRTC = ({
     initMedia();
 
     return () => {
+      // Local stream cleanup is also handled in the main unmount effect
+      // but keeping this as a primary source of truth for the initial acquisition
       stream?.getTracks()?.forEach((t) => t.stop());
     };
   }, []);
+
+  // Keep refs in sync with state for cleanup closure
+  useEffect(() => {
+    localStreamRef.current = localStream;
+  }, [localStream]);
+
+  useEffect(() => {
+    remoteStreamRef.current = remoteStream;
+  }, [remoteStream]);
 
   // ─── Start Call ───────────────────────────────────────────────────────────
 
@@ -182,7 +196,7 @@ export const useWebRTC = ({
     serviceRef.current = null;
     stopDurationTimer();
     setCallState((prev) => ({ ...prev, status: "ended" }));
-    
+
     // Reset controls state
     setControls({
       isMicEnabled: false,
@@ -213,24 +227,20 @@ export const useWebRTC = ({
   useEffect(() => {
     return () => {
       // Stop all local media tracks
-      if (localStream) {
-        localStream.getTracks().forEach((track) => {
-          track.stop();
-        });
-      }
+      localStreamRef.current?.getTracks()?.forEach((track) => {
+        track.stop();
+      });
 
       // Stop all remote media tracks
-      if (remoteStream) {
-        remoteStream.getTracks().forEach((track) => {
-          track.stop();
-        });
-      }
+      remoteStreamRef.current?.getTracks()?.forEach((track) => {
+        track.stop();
+      });
 
       // Close WebRTC connection
       serviceRef.current?.closeConnection();
       stopDurationTimer();
     };
-  }, [localStream, remoteStream, stopDurationTimer]);
+  }, [stopDurationTimer]); // stopDurationTimer is stable (useCallback)
 
   return {
     localStream,

@@ -12,12 +12,18 @@
 
 import React, { useEffect, useRef, useState } from "react";
 import { Spinner } from "../../../components/ui/Spinner";
+import InterviewSidebar from "./InterviewSidebar";
+import type { UserRole, InterviewStats } from "../../../types";
 
 interface VideoGridProps {
   localStream: MediaStream | null;
   remoteStream: MediaStream | null;
   isConnecting: boolean;
   remoteUserName?: string;
+  /** The current user's role — sidebar is only shown when "interviewer" */
+  userRole?: UserRole;
+  /** Live interview monitoring stats — passed from CallPage */
+  interviewStats?: InterviewStats;
 }
 
 interface VideoElementProps {
@@ -58,6 +64,8 @@ export const VideoGrid: React.FC<VideoGridProps> = ({
   remoteStream,
   isConnecting,
   remoteUserName,
+  userRole,
+  interviewStats,
 }) => {
   const [isLocalPinned, setIsLocalPinned] = useState(false);
 
@@ -76,12 +84,15 @@ export const VideoGrid: React.FC<VideoGridProps> = ({
   const hasAnyStream = localStream || remoteStream;
   const showPlaceholder = !hasAnyStream;
 
-  const showSidebar = userRole === "interviewer" && interviewStats;
+  // Show the sidebar only when the current user is an interviewer AND stats are available
+  const showSidebar = userRole === "interviewer" && !!interviewStats;
 
   return (
     <div className="relative w-full h-full bg-gray-950 flex">
       {/* Main Video Area */}
-      <div className={`relative ${showSidebar ? "flex-1" : "w-full"} bg-gray-950`}>
+      <div
+        className={`relative ${showSidebar ? "flex-1" : "w-full"} bg-gray-950`}
+      >
         {/* Fullscreen video */}
         {fullscreenStream ? (
           <div
@@ -113,12 +124,23 @@ export const VideoGrid: React.FC<VideoGridProps> = ({
             ) : (
               <div className="flex flex-col items-center gap-3">
                 <div className="w-20 h-20 rounded-full bg-white/10 flex items-center justify-center">
-                  <svg className="w-10 h-10 text-white/30" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
-                      d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                  <svg
+                    className="w-10 h-10 text-white/30"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={1.5}
+                      d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
+                    />
                   </svg>
                 </div>
-                <p className="text-white/40 text-sm">Waiting for participant…</p>
+                <p className="text-white/40 text-sm">
+                  Waiting for participant…
+                </p>
               </div>
             )}
           </div>
