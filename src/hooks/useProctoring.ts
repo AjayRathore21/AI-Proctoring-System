@@ -19,6 +19,8 @@ interface UseProctoringOptions {
   showDrawing?: boolean;
   /** Whether to disable logging to Firebase (useful for visual-only detection) */
   disableLogging?: boolean;
+  /** Candidate name for logging */
+  candidateName?: string;
 }
 
 export const useProctoring = ({
@@ -28,6 +30,7 @@ export const useProctoring = ({
   canvasRef,
   showDrawing = false,
   disableLogging = false,
+  candidateName = "Candidate",
 }: UseProctoringOptions) => {
   const landmarkerRef = useRef<FaceLandmarker | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -43,6 +46,8 @@ export const useProctoring = ({
   const lastNoFaceTime = useRef<number | null>(null);
   const lastLookingAwayTime = useRef<number | null>(null);
   const lastMultipleFacesTime = useRef<number | null>(null);
+  const engagementScore = useRef<number>(100);
+  const lastEngagementUpdateTime = useRef<number>(0);
 
   // Cooldowns to avoid spamming logs
   const lastLogTime = useRef<Record<string, number>>({});
@@ -65,33 +70,52 @@ export const useProctoring = ({
       landmarks?: Landmark[][],
       objects?: ObjectDetection[],
     ) => {
-      if (!videoRef.current || !roomId) return;
+      const rId = roomId?.trim();
+      if (!videoRef.current || !rId) return;
+
+      console.log(`[Proctoring] 🚀 Triggering event: ${eventType}`);
 
       try {
-        // Pass landmarks and objects to screenshot so it always has drawings
+        // 1. Capture image immediately
         const dataUrl = proctoringService.captureScreenshot(
           videoRef.current,
           landmarks,
           objects,
         );
-        console.log("Screenshot captured with landmarks:", !!landmarks);
 
-        const screenshotUrl = await proctoringService.uploadScreenshot(
-          roomId,
-          dataUrl,
-        );
+        // 2. Wrap upload in a timeout-aware function
+        const uploadWithTimeout = async (): Promise<string> => {
+          try {
+            return await Promise.race([
+              proctoringService.uploadScreenshot(rId, dataUrl),
+              new Promise<string>((_, reject) =>
+                setTimeout(() => reject(new Error("Timeout")), 5000),
+              ),
+            ]);
+          } catch (e) {
+            console.warn("[Proctoring] Screenshot upload skipped:", e);
+            return "";
+          }
+        };
 
-        await roomService.addEventLog(roomId, {
+        // 3. Attempt upload, but don't let it hang the whole proctoring loop
+        const screenshotUrl = await uploadWithTimeout();
+
+        // 4. Log the text event immediately
+        await roomService.addEventLog(rId, {
           timestamp: new Date().toLocaleTimeString(),
           description,
           severity,
           eventType,
           screenshotUrl,
         });
+
+        console.log(`[Proctoring] ✅ Event logged: ${eventType}`);
       } catch (error) {
-        console.error("Failed to trigger proctoring event:", error);
+        console.error("[Proctoring] Failed to log event:", error);
       }
     },
+
     [roomId],
   );
 
@@ -203,6 +227,8 @@ export const useProctoring = ({
               );
               lastObjectDetectionTime = now;
 
+              console.log("Current objects:", currentObjects);
+
               // Handle object detection events
               if (!disableLogging) {
                 const detectedClasses = currentObjects.map((o) => o.class);
@@ -211,6 +237,7 @@ export const useProctoring = ({
                   detectedClasses.includes("cell phone") &&
                   shouldLog("mobile_phone", now)
                 ) {
+                  console.log("Mobile phone detected");
                   triggerEvent(
                     "Mobile phone detected",
                     "alert",
@@ -221,13 +248,27 @@ export const useProctoring = ({
                 }
 
                 if (
-                  detectedClasses.includes("book") &&
+                  (detectedClasses.includes("book") ||
+                    detectedClasses.includes("handbag")) &&
                   shouldLog("book_detected", now)
                 ) {
                   triggerEvent(
                     "Book or notes detected",
                     "warning",
                     "book_detected",
+                    faceResults?.faceLandmarks as Landmark[][],
+                    currentObjects,
+                  );
+                }
+
+                if (
+                  detectedClasses.includes("watch") &&
+                  shouldLog("smartwatch", now)
+                ) {
+                  triggerEvent(
+                    "Smartwatch or unauthorized watch detected",
+                    "warning",
+                    "smartwatch",
                     faceResults?.faceLandmarks as Landmark[][],
                     currentObjects,
                   );
@@ -249,6 +290,53 @@ export const useProctoring = ({
               }
             } catch {
               // ignore
+            }
+          }
+
+          // ─── Engagement Tracking ──────────────────────────────────────────
+
+          if (!disableLogging && faceResults) {
+            // Update engagement score every second (heuristic)
+            let penalty = 0;
+            if (faceResults.faceLandmarks.length === 0) penalty = 5;
+            else if (faceResults.faceLandmarks.length > 1) penalty = 3;
+            else {
+              // Check looking away
+              const landmarks = faceResults.faceLandmarks[0];
+              const nose = landmarks[1];
+              const leftEye = landmarks[33];
+              const rightEye = landmarks[263];
+              const ratio =
+                Math.abs(nose.x - leftEye.x) / Math.abs(nose.x - rightEye.x);
+              if (ratio < 0.4 || ratio > 2.5) penalty = 2;
+            }
+
+            // Item penalties
+            if (currentObjects.some((o) => o.class === "cell phone"))
+              penalty += 5;
+            if (currentObjects.some((o) => o.class === "watch")) penalty += 2;
+
+            if (penalty > 0) {
+              // Penalty: 0.02 to 0.05 per frame -> ~1.2% to 3% per second
+              engagementScore.current = Math.max(
+                0,
+                engagementScore.current - penalty / 100,
+              );
+            } else {
+              // Recovery: 0.01 per frame -> ~0.6% per second
+              engagementScore.current = Math.min(
+                100,
+                engagementScore.current + 0.01,
+              );
+            }
+
+            // Sync engagement level to Firestore every 5 seconds
+            if (now - lastEngagementUpdateTime.current > 5000) {
+              roomService.updateInterviewStats(roomId, {
+                candidateName,
+                engagementLevel: Math.round(engagementScore.current),
+              });
+              lastEngagementUpdateTime.current = now;
             }
           }
 
@@ -451,6 +539,7 @@ export const useProctoring = ({
     showDrawing,
     canvasRef,
     disableLogging,
+    candidateName,
   ]);
 
   return {

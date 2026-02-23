@@ -15,6 +15,17 @@ interface InterviewSidebarProps {
 }
 
 const InterviewSidebar: React.FC<InterviewSidebarProps> = ({ stats }) => {
+  // Defensive checks to ensure component doesn't crash if stats are partially missing
+  const candidateName = stats?.candidateName || "Candidate";
+  const eventLog = stats?.eventLog || [];
+  const engagementLevel = stats?.engagementLevel ?? 100;
+  const itemDetection = stats?.itemDetection || {
+    mobilePhone: 0,
+    notesBooks: 0,
+    extraElectronics: 0,
+    smartwatch: 0,
+  };
+
   const getSeverityIcon = (severity: EventSeverity) => {
     switch (severity) {
       case "alert":
@@ -76,7 +87,9 @@ const InterviewSidebar: React.FC<InterviewSidebarProps> = ({ stats }) => {
   };
 
   const getEventIcon = (eventType: string) => {
-    if (eventType.includes("phone") || eventType.includes("mobile")) {
+    if (!eventType) return null;
+    const lowerType = eventType.toLowerCase();
+    if (lowerType.includes("phone") || lowerType.includes("mobile")) {
       return (
         <svg
           className="w-4 h-4 text-red-400"
@@ -93,7 +106,7 @@ const InterviewSidebar: React.FC<InterviewSidebarProps> = ({ stats }) => {
         </svg>
       );
     }
-    if (eventType.includes("face") || eventType.includes("looking")) {
+    if (lowerType.includes("face") || lowerType.includes("looking")) {
       return (
         <svg
           className="w-4 h-4 text-yellow-400"
@@ -111,9 +124,9 @@ const InterviewSidebar: React.FC<InterviewSidebarProps> = ({ stats }) => {
       );
     }
     if (
-      eventType.includes("paper") ||
-      eventType.includes("note") ||
-      eventType.includes("book")
+      lowerType.includes("paper") ||
+      lowerType.includes("note") ||
+      lowerType.includes("book")
     ) {
       return (
         <svg
@@ -131,7 +144,7 @@ const InterviewSidebar: React.FC<InterviewSidebarProps> = ({ stats }) => {
         </svg>
       );
     }
-    if (eventType.includes("electronic")) {
+    if (lowerType.includes("electronic")) {
       return (
         <svg
           className="w-4 h-4 text-blue-400"
@@ -158,14 +171,14 @@ const InterviewSidebar: React.FC<InterviewSidebarProps> = ({ stats }) => {
         <div className="flex items-center gap-3 mb-3">
           {/* Profile Picture Placeholder */}
           <div className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-semibold text-lg flex-shrink-0">
-            {stats.candidateName.charAt(0).toUpperCase()}
+            {candidateName.charAt(0).toUpperCase()}
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-xs text-white/60 uppercase tracking-wider font-medium">
               Candidate
             </p>
             <p className="text-white font-semibold truncate">
-              {stats.candidateName.toUpperCase()}
+              {candidateName.toUpperCase()}
             </p>
           </div>
         </div>
@@ -178,11 +191,11 @@ const InterviewSidebar: React.FC<InterviewSidebarProps> = ({ stats }) => {
             <div className="flex-1 h-2 bg-white/10 rounded-full overflow-hidden">
               <div
                 className="h-full bg-gradient-to-r from-cyan-400 to-blue-500 transition-all duration-300"
-                style={{ width: `${stats.engagementLevel}%` }}
+                style={{ width: `${engagementLevel}%` }}
               />
             </div>
             <span className="text-white font-semibold text-sm whitespace-nowrap">
-              {stats.engagementLevel}%
+              {engagementLevel}%
             </span>
           </div>
         </div>
@@ -196,12 +209,12 @@ const InterviewSidebar: React.FC<InterviewSidebarProps> = ({ stats }) => {
           </h3>
         </div>
         <div className="flex-1 overflow-y-auto p-3 space-y-2">
-          {stats.eventLog.length === 0 ? (
+          {eventLog.length === 0 ? (
             <div className="text-center text-white/40 text-sm py-8">
               No events detected yet
             </div>
           ) : (
-            stats.eventLog.map((event: EventLogEntry) => (
+            eventLog.map((event: EventLogEntry) => (
               <div
                 key={event.id}
                 className="flex items-start gap-2 p-2 rounded-lg bg-white/5 hover:bg-white/10 transition-colors"
@@ -268,7 +281,7 @@ const InterviewSidebar: React.FC<InterviewSidebarProps> = ({ stats }) => {
               Mobile Phone
             </p>
             <p className="text-sm text-white font-semibold">
-              ({stats.itemDetection.mobilePhone})
+              ({itemDetection.mobilePhone})
             </p>
           </div>
 
@@ -293,7 +306,7 @@ const InterviewSidebar: React.FC<InterviewSidebarProps> = ({ stats }) => {
               Notes/Books
             </p>
             <p className="text-sm text-white font-semibold">
-              ({stats.itemDetection.notesBooks})
+              ({itemDetection.notesBooks})
             </p>
           </div>
 
@@ -318,7 +331,7 @@ const InterviewSidebar: React.FC<InterviewSidebarProps> = ({ stats }) => {
               Extra Electronics
             </p>
             <p className="text-sm text-white font-semibold">
-              ({stats.itemDetection.extraElectronics})
+              ({itemDetection.extraElectronics})
             </p>
           </div>
 
@@ -341,7 +354,7 @@ const InterviewSidebar: React.FC<InterviewSidebarProps> = ({ stats }) => {
             </div>
             <p className="text-xs text-white/70 text-center mb-1">Smartwatch</p>
             <p className="text-sm text-white font-semibold">
-              ({stats.itemDetection.smartwatch})
+              ({itemDetection.smartwatch})
             </p>
           </div>
         </div>

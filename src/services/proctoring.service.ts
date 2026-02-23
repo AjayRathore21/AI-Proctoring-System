@@ -1,5 +1,3 @@
-import { ref, uploadString, getDownloadURL } from "firebase/storage";
-import { storage } from "./firebase.service";
 import * as cocoSsd from "@tensorflow-models/coco-ssd";
 import "@tensorflow/tfjs";
 
@@ -120,9 +118,12 @@ export const proctoringService = {
       if (obj.class === "cell phone") {
         ctx.strokeStyle = "#ff4757"; // Red
         ctx.fillStyle = "#ff4757";
-      } else if (obj.class === "book") {
+      } else if (obj.class === "book" || obj.class === "handbag") {
         ctx.strokeStyle = "#ffa502"; // Orange
         ctx.fillStyle = "#ffa502";
+      } else if (obj.class === "watch") {
+        ctx.strokeStyle = "#a55eea"; // Purple
+        ctx.fillStyle = "#a55eea";
       } else {
         ctx.strokeStyle = "#2f3542"; // Dark blue/gray
         ctx.fillStyle = "#2f3542";
@@ -138,12 +139,53 @@ export const proctoringService = {
   },
 
   /**
-   * Uploads a screenshot data URL to Firebase Storage.
+   * Uploads a screenshot data URL to Cloudinary.
+   * NOTE: For client-side uploads, you must use an "Unsigned" upload preset
+   * in your Cloudinary settings to avoid exposing your API Secret in the browser.
    */
   async uploadScreenshot(roomId: string, dataUrl: string): Promise<string> {
-    const filename = `proctoring/${roomId}/${Date.now()}.webp`;
-    const storageRef = ref(storage, filename);
-    await uploadString(storageRef, dataUrl, "data_url");
-    return await getDownloadURL(storageRef);
+    try {
+      const cloudName = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME;
+      const uploadPreset = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
+      console.log(
+        "[ProctoringService] Cloudinary credentials:",
+        cloudName,
+        uploadPreset,
+      );
+      if (!cloudName || !uploadPreset) {
+        console.warn(
+          "[ProctoringService] Cloudinary credentials missing. Skipping upload.",
+        );
+        return "";
+      }
+      console.log("[ProctoringService] Uploading screenshot to Cloudinary...");
+      
+      const formData = new FormData();
+      formData.append("file", dataUrl);
+      formData.append("upload_preset", uploadPreset);
+      formData.append("folder", `proctoring/${roomId}`);
+
+      const response = await fetch(
+        `https://api.cloudinary.com/v1_1/${cloudName}/image/upload`,
+        {
+          method: "POST",
+          body: formData,
+        },
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error?.message || "Cloudinary upload failed");
+      }
+
+      const data = await response.json();
+      return data.secure_url;
+    } catch (error) {
+      console.error(
+        "[ProctoringService] Error uploading to Cloudinary:",
+        error,
+      );
+      return ""; // Return empty string so the log still gets created in Firestore
+    }
   },
 };

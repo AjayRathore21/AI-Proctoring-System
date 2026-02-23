@@ -67,6 +67,7 @@ export const CallPage: React.FC = () => {
     stream: user?.role === "interviewee" ? localStream : remoteStream,
     enabled: !!roomId && callState.status === "connected",
     disableLogging: user?.role === "interviewer", // Only log from interviewee side
+    candidateName: user?.displayName || user?.email || "Candidate",
   });
 
   // ─── Subscribe to Interview Stats (Interviewer side) ────────────────────────

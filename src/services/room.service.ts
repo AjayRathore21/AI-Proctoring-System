@@ -23,7 +23,13 @@ import {
 } from "firebase/firestore";
 import { v4 as uuidv4 } from "uuid";
 import { db } from "./firebase.service";
-import type { Room, RoomStatus, InterviewStats, EventLogEntry } from "../types";
+import type {
+  Room,
+  RoomStatus,
+  InterviewStats,
+  EventLogEntry,
+  ItemDetectionCounts,
+} from "../types";
 
 const ROOMS_COLLECTION = "rooms";
 
@@ -178,38 +184,112 @@ export const roomService = {
     roomId: string,
     entry: Omit<EventLogEntry, "id">,
   ): Promise<void> {
-    const statsRef = doc(db, ROOMS_COLLECTION, roomId, "monitoring", "stats");
-    const snap = await getDoc(statsRef);
-    const existingStats = snap.data() as InterviewStats | undefined;
-
-    const newEntry: EventLogEntry = {
-      ...entry,
-      id: uuidv4(),
-    };
-
-    console.log("New entry:", newEntry);
-
-    const updatedLog = [newEntry, ...(existingStats?.eventLog || [])].slice(
-      0,
-      50,
-    ); // Keep last 50 logs
-
-    const updates: Record<string, unknown> = {
-      eventLog: updatedLog,
-    };
-
-    if (entry.eventType.includes("mobile")) {
-      updates["itemDetection.mobilePhone"] =
-        (existingStats?.itemDetection?.mobilePhone || 0) + 1;
-    } else if (entry.eventType.includes("book")) {
-      updates["itemDetection.notesBooks"] =
-        (existingStats?.itemDetection?.notesBooks || 0) + 1;
-    } else if (entry.eventType.includes("electronic")) {
-      updates["itemDetection.extraElectronics"] =
-        (existingStats?.itemDetection?.extraElectronics || 0) + 1;
+    // 0. Initial check
+    if (!roomId) {
+      console.error("[addEventLog] FATAL: roomId is missing");
+      return;
     }
 
-    await updateDoc(statsRef, updates as any);
+    console.log(
+      "[addEventLog] START - RoomID:",
+      roomId,
+      "EventType:",
+      entry.eventType,
+    );
+
+    try {
+      // 1. Path construction check
+      const collectionPath = ROOMS_COLLECTION;
+      const docPath = roomId;
+      const subCollection = "monitoring";
+      const subDoc = "stats";
+
+      console.log("[addEventLog] Segments:", {
+        collectionPath,
+        docPath,
+        subCollection,
+        subDoc,
+      });
+
+      // 2. Reference creation
+      const statsRef = doc(db, collectionPath, docPath, subCollection, subDoc);
+      console.log("[addEventLog] SUCCESS: statsRef created");
+
+      // 3. Fetch current state
+      console.log("[addEventLog] Fetching current doc...");
+      const snap = await getDoc(statsRef);
+      const existingData = snap.data() as InterviewStats | undefined;
+      console.log("[addEventLog] Doc exists:", snap.exists());
+
+      // 4. Prepare new entry
+      let newId;
+      try {
+        newId = uuidv4();
+      } catch (e) {
+        console.error("[addEventLog] uuidv4 failed", e);
+        newId = Math.random().toString(36).substring(7);
+      }
+
+      const newEntry: EventLogEntry = {
+        ...entry,
+        id: newId,
+      };
+
+      // 5. Build log array
+      const currentLog = existingData?.eventLog || [];
+      const updatedLog = [newEntry, ...currentLog].slice(0, 50);
+
+      // 6. Build item detected counters
+      const counters: ItemDetectionCounts = {
+        mobilePhone: existingData?.itemDetection?.mobilePhone || 0,
+        notesBooks: existingData?.itemDetection?.notesBooks || 0,
+        extraElectronics: existingData?.itemDetection?.extraElectronics || 0,
+        smartwatch: existingData?.itemDetection?.smartwatch || 0,
+      };
+
+      const type = entry.eventType.toLowerCase();
+      if (type.includes("mobile") || type.includes("phone"))
+        counters.mobilePhone += 1;
+      else if (type.includes("book") || type.includes("note"))
+        counters.notesBooks += 1;
+      else if (type.includes("electronic")) counters.extraElectronics += 1;
+      else if (type.includes("smartwatch") || type.includes("watch"))
+        counters.smartwatch += 1;
+
+      // 7. Execute Save
+      const payload = {
+        eventLog: updatedLog,
+        itemDetection: counters,
+      };
+
+      console.log("[addEventLog] Final write payload:", payload);
+      await setDoc(statsRef, payload, { merge: true });
+      console.log("[addEventLog] FINISHED - Event saved successfully");
+    } catch (err: unknown) {
+      const error = err as Error;
+      console.error("[addEventLog] CRITICAL FAILURE:", error);
+      // Fallback: try minimal log if complex one fails
+      try {
+        console.log("[addEventLog] Attempting emergency minimal log...");
+        const emergencyRef = doc(
+          db,
+          ROOMS_COLLECTION,
+          roomId,
+          "monitoring",
+          "stats",
+        );
+        await setDoc(
+          emergencyRef,
+          {
+            lastError: error.message || "Unknown error",
+            errorTime: new Date().toISOString(),
+          },
+          { merge: true },
+        );
+      } catch (innerErr) {
+        console.error("[addEventLog] Emergency log failed too", innerErr);
+      }
+    }
   },
 
   /**
