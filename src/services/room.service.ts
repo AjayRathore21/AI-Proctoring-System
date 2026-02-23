@@ -23,7 +23,7 @@ import {
 } from "firebase/firestore";
 import { v4 as uuidv4 } from "uuid";
 import { db } from "./firebase.service";
-import type { Room, RoomStatus } from "../types";
+import type { Room, RoomStatus, InterviewStats, EventLogEntry } from "../types";
 
 const ROOMS_COLLECTION = "rooms";
 
@@ -37,12 +37,14 @@ const toRoom = (snap: DocumentSnapshot): Room | null => {
     createdBy: data.createdBy,
     joinedBy: data.joinedBy ?? null,
     sessionId: data.sessionId ?? null,
-    startedAt: data.startedAt instanceof Timestamp
-      ? data.startedAt.toMillis()
-      : data.startedAt ?? null,
-    endedAt: data.endedAt instanceof Timestamp
-      ? data.endedAt.toMillis()
-      : data.endedAt ?? null,
+    startedAt:
+      data.startedAt instanceof Timestamp
+        ? data.startedAt.toMillis()
+        : (data.startedAt ?? null),
+    endedAt:
+      data.endedAt instanceof Timestamp
+        ? data.endedAt.toMillis()
+        : (data.endedAt ?? null),
     duration: data.duration ?? null,
     status: (data.status as RoomStatus) ?? "waiting",
     recordingUrl: data.recordingUrl ?? null,
@@ -83,8 +85,10 @@ export const roomService = {
     const snap = await getDoc(doc(db, ROOMS_COLLECTION, roomId));
     const room = toRoom(snap);
 
-    if (!room) throw new Error("Room not found. Check the room ID and try again.");
-    if (room.status === "ended") throw new Error("This call has already ended.");
+    if (!room)
+      throw new Error("Room not found. Check the room ID and try again.");
+    if (room.status === "ended")
+      throw new Error("This call has already ended.");
     if (room.joinedBy && room.joinedBy !== joiningUserId) {
       throw new Error("This room already has two participants.");
     }
@@ -127,7 +131,7 @@ export const roomService = {
   async endRoom(
     roomId: string,
     startedAtMs: number,
-    recordingUrl: string | null
+    recordingUrl: string | null,
   ): Promise<void> {
     const now = Date.now();
     const duration = Math.floor((now - startedAtMs) / 1000);
@@ -147,12 +151,81 @@ export const roomService = {
   subscribeToRoom(
     roomId: string,
     onUpdate: (room: Room | null) => void,
-    onError?: (error: Error) => void
+    onError?: (error: Error) => void,
   ): () => void {
     return onSnapshot(
       doc(db, ROOMS_COLLECTION, roomId),
       (snap) => onUpdate(toRoom(snap)),
-      (err) => onError?.(err)
+      (err) => onError?.(err),
     );
+  },
+
+  /**
+   * Updates or initializes the interview stats for a room.
+   */
+  async updateInterviewStats(
+    roomId: string,
+    stats: Partial<InterviewStats>,
+  ): Promise<void> {
+    const statsRef = doc(db, ROOMS_COLLECTION, roomId, "monitoring", "stats");
+    await setDoc(statsRef, stats, { merge: true });
+  },
+
+  /**
+   * Adds a new event log entry to the room's monitoring.
+   */
+  async addEventLog(
+    roomId: string,
+    entry: Omit<EventLogEntry, "id">,
+  ): Promise<void> {
+    const statsRef = doc(db, ROOMS_COLLECTION, roomId, "monitoring", "stats");
+    const snap = await getDoc(statsRef);
+    const existingStats = snap.data() as InterviewStats | undefined;
+
+    const newEntry: EventLogEntry = {
+      ...entry,
+      id: uuidv4(),
+    };
+
+    console.log("New entry:", newEntry);
+
+    const updatedLog = [newEntry, ...(existingStats?.eventLog || [])].slice(
+      0,
+      50,
+    ); // Keep last 50 logs
+
+    const updates: Record<string, unknown> = {
+      eventLog: updatedLog,
+    };
+
+    if (entry.eventType.includes("mobile")) {
+      updates["itemDetection.mobilePhone"] =
+        (existingStats?.itemDetection?.mobilePhone || 0) + 1;
+    } else if (entry.eventType.includes("book")) {
+      updates["itemDetection.notesBooks"] =
+        (existingStats?.itemDetection?.notesBooks || 0) + 1;
+    } else if (entry.eventType.includes("electronic")) {
+      updates["itemDetection.extraElectronics"] =
+        (existingStats?.itemDetection?.extraElectronics || 0) + 1;
+    }
+
+    await updateDoc(statsRef, updates as any);
+  },
+
+  /**
+   * Subscribes to interview stats for a room.
+   */
+  subscribeToInterviewStats(
+    roomId: string,
+    onUpdate: (stats: InterviewStats | null) => void,
+  ): () => void {
+    const statsRef = doc(db, ROOMS_COLLECTION, roomId, "monitoring", "stats");
+    return onSnapshot(statsRef, (snap) => {
+      if (snap.exists()) {
+        onUpdate(snap.data() as InterviewStats);
+      } else {
+        onUpdate(null);
+      }
+    });
   },
 };

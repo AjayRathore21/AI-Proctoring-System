@@ -31,12 +31,12 @@ export type RoomStatus = "waiting" | "active" | "ended";
 
 export interface Room {
   roomId: string;
-  createdBy: string;        // uid of the creator
-  joinedBy: string | null;  // uid of the second participant
+  createdBy: string; // uid of the creator
+  joinedBy: string | null; // uid of the second participant
   sessionId: string | null;
   startedAt: number | null; // Unix ms – set when second participant joins
   endedAt: number | null;
-  duration: number | null;  // seconds
+  duration: number | null; // seconds
   status: RoomStatus;
   recordingUrl: string | null;
 }
@@ -88,6 +88,7 @@ export interface EventLogEntry {
   description: string;
   severity: EventSeverity;
   eventType: string;
+  screenshotUrl?: string;
 }
 
 export interface ItemDetectionCounts {

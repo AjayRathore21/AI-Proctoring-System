@@ -1,15 +1,3 @@
-/**
- * VideoGrid — Google Meet-style video layout with toggleable fullscreen/PiP.
- *
- * Behavior:
- *  - Default: Remote video fullscreen, local video PiP (bottom-right).
- *  - Click local PiP → Local fullscreen, remote PiP (same position).
- *  - Click remote PiP → Remote fullscreen, local PiP (same position).
- *  - Click fullscreen video → Swap to the other stream (if PiP exists).
- *  - Layout and PiP size/position remain consistent when toggling.
- *  - Both streams always visible if available (one fullscreen, one PiP).
- */
-
 import React, { useEffect, useRef, useState } from "react";
 import { Spinner } from "../../../components/ui/Spinner";
 import InterviewSidebar from "./InterviewSidebar";
@@ -24,6 +12,10 @@ interface VideoGridProps {
   userRole?: UserRole;
   /** Live interview monitoring stats — passed from CallPage */
   interviewStats?: InterviewStats;
+  /** Room ID for proctoring */
+  roomId?: string;
+  /** Processed stream with landmarks (from CallPage) */
+  processedStream?: MediaStream | null;
 }
 
 interface VideoElementProps {
@@ -48,14 +40,17 @@ const VideoElement: React.FC<VideoElementProps> = ({
   }, [stream]);
 
   return (
-    <video
-      ref={videoRef}
-      autoPlay
-      playsInline
-      muted={muted}
-      className={className}
-      aria-label={ariaLabel}
-    />
+    <div className={`relative ${className}`}>
+      <video
+        ref={videoRef}
+        autoPlay
+        playsInline
+        muted={muted}
+        className="w-full h-full object-cover"
+        style={{ transform: muted ? "scaleX(-1)" : "none" }} // Flip local video
+        aria-label={ariaLabel}
+      />
+    </div>
   );
 };
 
@@ -66,8 +61,10 @@ export const VideoGrid: React.FC<VideoGridProps> = ({
   remoteUserName,
   userRole,
   interviewStats,
+  processedStream,
 }) => {
   const [isLocalPinned, setIsLocalPinned] = useState(false);
+  const [showDetection, setShowDetection] = useState(false);
 
   // Toggle between local and remote fullscreen
   const togglePin = () => {
@@ -75,8 +72,15 @@ export const VideoGrid: React.FC<VideoGridProps> = ({
   };
 
   // Determine which stream is fullscreen and which is PiP
-  const fullscreenStream = isLocalPinned ? localStream : remoteStream;
-  const pipStream = isLocalPinned ? remoteStream : localStream;
+  // For the remote stream, use the processed version if detection is ON and it's the interviewer
+  const effectiveRemoteStream =
+    showDetection && userRole === "interviewer"
+      ? processedStream || remoteStream
+      : remoteStream;
+
+  const fullscreenStream = isLocalPinned ? localStream : effectiveRemoteStream;
+  const pipStream = isLocalPinned ? effectiveRemoteStream : localStream;
+
   const isFullscreenLocal = isLocalPinned;
   const isPipLocal = !isLocalPinned;
 
@@ -93,6 +97,37 @@ export const VideoGrid: React.FC<VideoGridProps> = ({
       <div
         className={`relative ${showSidebar ? "flex-1" : "w-full"} bg-gray-950`}
       >
+        {/* Detection Toggle - Only for interviewer */}
+        {userRole === "interviewer" && remoteStream && (
+          <div className="absolute top-6 left-6 z-30 flex flex-col gap-2">
+            <button
+              onClick={() => setShowDetection(!showDetection)}
+              className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-all ${
+                showDetection
+                  ? "bg-indigo-600 text-white shadow-lg shadow-indigo-500/30"
+                  : "bg-white/10 text-white/70 hover:bg-white/20 border border-white/10"
+              }`}
+            >
+              <div
+                className={`w-2 h-2 rounded-full ${
+                  showDetection ? "bg-white animate-pulse" : "bg-white/30"
+                }`}
+              />
+              {showDetection ? "Detection On" : "Show Detection"}
+            </button>
+
+            {showDetection && !processedStream && (
+              <div className="px-3 py-1 bg-black/60 backdrop-blur-md rounded-lg border border-white/10 flex items-center gap-2">
+                <Spinner size="sm" />
+
+                <span className="text-[10px] text-white/80 font-medium uppercase tracking-wider">
+                  Initializing AI Models...
+                </span>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Fullscreen video */}
         {fullscreenStream ? (
           <div
@@ -101,7 +136,7 @@ export const VideoGrid: React.FC<VideoGridProps> = ({
           >
             <VideoElement
               stream={fullscreenStream}
-              className="w-full h-full object-cover"
+              className="w-full h-full"
               aria-label={
                 isFullscreenLocal
                   ? "Your video (click to show remote fullscreen)"
@@ -165,7 +200,7 @@ export const VideoGrid: React.FC<VideoGridProps> = ({
             <VideoElement
               stream={pipStream}
               muted={isPipLocal}
-              className={`w-full h-full object-cover ${isPipLocal ? "scale-x-[-1]" : ""}`}
+              className="w-full h-full"
             />
           </div>
         )}

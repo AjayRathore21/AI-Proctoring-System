@@ -25,6 +25,8 @@ import { CallControls } from "./components/CallControls";
 import { ErrorBanner } from "../../components/ui/ErrorBanner";
 import { Spinner } from "../../components/ui/Spinner";
 import type { InterviewStats } from "../../types";
+import { useProctoring } from "../../hooks/useProctoring";
+import { roomService } from "../../services/room.service";
 
 export const CallPage: React.FC = () => {
   const { roomId } = useParams<{ roomId: string }>();
@@ -34,65 +36,14 @@ export const CallPage: React.FC = () => {
 
   const role = (searchParams.get("role") as "caller" | "callee") ?? "caller";
 
-  if (!roomId) return <Navigate to="/lobby" replace />;
-
   const { room, subscribeToRoom, endRoom } = useRoom();
   const recording = useRecording();
 
   const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
   const callStartedRef = useRef(false);
 
-  // Default interview stats - can be replaced with real-time data later
-  const [interviewStats] = useState<InterviewStats>({
-    candidateName:
-      user?.role === "interviewer" && room?.joinedBy
-        ? "Interviewee"
-        : "Waiting...",
-    engagementLevel: 98,
-    eventLog: [
-      {
-        id: "1",
-        timestamp: "10:36:01",
-        description: "Mobile phone detected",
-        severity: "normal",
-        eventType: "mobile_phone",
-      },
-      {
-        id: "2",
-        timestamp: "10:36:15",
-        description: "User looking away (5s)",
-        severity: "warning",
-        eventType: "looking_away",
-      },
-      {
-        id: "3",
-        timestamp: "10:37:05",
-        description: "No face detected (10s)",
-        severity: "alert",
-        eventType: "no_face",
-      },
-      {
-        id: "4",
-        timestamp: "10:37:15",
-        description: "Multiple faces detected",
-        severity: "alert",
-        eventType: "multiple_faces",
-      },
-      {
-        id: "5",
-        timestamp: "10:38:02",
-        description: "Papers/notes detected",
-        severity: "normal",
-        eventType: "papers_notes",
-      },
-    ],
-    itemDetection: {
-      mobilePhone: 3,
-      notesBooks: 1,
-      extraElectronics: 0,
-      smartwatch: 0,
-    },
-  });
+  // Real-time interview monitoring stats
+  const [activeStats, setActiveStats] = useState<InterviewStats | null>(null);
 
   const {
     localStream,
@@ -103,15 +54,39 @@ export const CallPage: React.FC = () => {
     startCall,
     hangUp,
   } = useWebRTC({
-    roomId,
+    roomId: roomId || "",
     role,
     onRemoteStream: setRemoteStream,
   });
 
+  // ─── Proctoring (Enabled for interviewee self-monitoring OR interviewer remote-monitoring) ──────────────────
+
+  const { processedStream } = useProctoring({
+    roomId: roomId || "",
+    // If interviewee: process local stream (self). If interviewer: process remote stream (candidate).
+    stream: user?.role === "interviewee" ? localStream : remoteStream,
+    enabled: !!roomId && callState.status === "connected",
+    disableLogging: user?.role === "interviewer", // Only log from interviewee side
+  });
+
+  // ─── Subscribe to Interview Stats (Interviewer side) ────────────────────────
+
+  useEffect(() => {
+    if (user?.role === "interviewer" && roomId) {
+      return roomService.subscribeToInterviewStats(roomId, (stats) => {
+        if (stats) {
+          setActiveStats(stats);
+        }
+      });
+    }
+  }, [roomId, user?.role]);
+
   // ─── Subscribe to Room ────────────────────────────────────────────────────
 
   useEffect(() => {
-    subscribeToRoom(roomId);
+    if (roomId) {
+      subscribeToRoom(roomId);
+    }
   }, [roomId, subscribeToRoom]);
 
   // ─── Start Call ───────────────────────────────────────────────────────────
@@ -134,13 +109,22 @@ export const CallPage: React.FC = () => {
   const handleToggleRecording = useCallback(() => {
     if (recording.isRecording) return;
     if (localStream && remoteStream) {
-      recording.startRecording(localStream, remoteStream);
+      // If interviewer, we want the remote stream (interviewee) to have drawings in recording.
+      // If interviewee, we want the local stream (self) to have drawings (though current service records remote).
+      const videoStream =
+        user?.role === "interviewer"
+          ? processedStream || remoteStream
+          : remoteStream;
+      const audioStream = localStream; // localStream has our mic
+
+      recording.startRecording(audioStream, videoStream);
     }
-  }, [recording, localStream, remoteStream]);
+  }, [recording, localStream, remoteStream, processedStream, user?.role]);
 
   // ─── Handle End Call ──────────────────────────────────────────────────────
 
   const handleEndCall = async () => {
+    if (!roomId) return;
     hangUp();
 
     let recordingUrl: string | null = null;
@@ -195,8 +179,22 @@ export const CallPage: React.FC = () => {
           remoteStream={remoteStream}
           isConnecting={callState.status === "connecting"}
           userRole={user.role}
+          roomId={roomId}
+          processedStream={processedStream}
           interviewStats={
-            user.role === "interviewer" ? interviewStats : undefined
+            user.role === "interviewer"
+              ? activeStats || {
+                  candidateName: "Interviewee",
+                  engagementLevel: 100,
+                  eventLog: [],
+                  itemDetection: {
+                    mobilePhone: 0,
+                    notesBooks: 0,
+                    extraElectronics: 0,
+                    smartwatch: 0,
+                  },
+                }
+              : undefined
           }
         />
       </div>
@@ -225,6 +223,9 @@ export const CallPage: React.FC = () => {
           />
         </div>
       )}
+
+      {/* roomId guard moved here to satisfy hook rules */}
+      {!roomId && <Navigate to="/lobby" replace />}
     </div>
   );
 };
