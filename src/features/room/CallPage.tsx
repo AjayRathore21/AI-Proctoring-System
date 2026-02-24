@@ -10,12 +10,7 @@
  */
 
 import React, { useEffect, useRef, useState, useCallback } from "react";
-import {
-  useParams,
-  useSearchParams,
-  useNavigate,
-  Navigate,
-} from "react-router-dom";
+import { useParams, useSearchParams, Navigate } from "react-router-dom";
 import { useWebRTC } from "../../hooks/useWebRTC";
 import { useRoom } from "../../hooks/useRoom";
 import { useRecording } from "../../hooks/useRecording";
@@ -27,11 +22,11 @@ import { Spinner } from "../../components/ui/Spinner";
 import type { InterviewStats } from "../../types";
 import { useProctoring } from "../../hooks/useProctoring";
 import { roomService } from "../../services/room.service";
+import { CallSummary } from "./components/CallSummary";
 
 export const CallPage: React.FC = () => {
   const { roomId } = useParams<{ roomId: string }>();
   const [searchParams] = useSearchParams();
-  const navigate = useNavigate();
   const { user } = useAuth();
 
   const role = (searchParams.get("role") as "caller" | "callee") ?? "caller";
@@ -44,6 +39,7 @@ export const CallPage: React.FC = () => {
 
   // Real-time interview monitoring stats
   const [activeStats, setActiveStats] = useState<InterviewStats | null>(null);
+  const [isEndingLocally, setIsEndingLocally] = useState(false);
 
   const {
     localStream,
@@ -53,6 +49,7 @@ export const CallPage: React.FC = () => {
     toggleCamera,
     startCall,
     hangUp,
+    getNetworkStats,
   } = useWebRTC({
     roomId: roomId || "",
     role,
@@ -73,14 +70,14 @@ export const CallPage: React.FC = () => {
   // ─── Subscribe to Interview Stats (Interviewer side) ────────────────────────
 
   useEffect(() => {
-    if (user?.role === "interviewer" && roomId) {
+    if (roomId) {
       return roomService.subscribeToInterviewStats(roomId, (stats) => {
         if (stats) {
           setActiveStats(stats);
         }
       });
     }
-  }, [roomId, user?.role]);
+  }, [roomId]);
 
   // ─── Subscribe to Room ────────────────────────────────────────────────────
 
@@ -126,6 +123,16 @@ export const CallPage: React.FC = () => {
 
   const handleEndCall = async () => {
     if (!roomId) return;
+    setIsEndingLocally(true);
+
+    // Get network stats before closing the connection
+    const netStats = await getNetworkStats();
+    if (netStats) {
+      await roomService.updateInterviewStats(roomId, {
+        networkStats: netStats,
+      });
+    }
+
     hangUp();
 
     let recordingUrl: string | null = null;
@@ -135,7 +142,6 @@ export const CallPage: React.FC = () => {
     }
 
     await endRoom(recordingUrl);
-    navigate("/lobby");
   };
 
   // ─── Guard: if room ended by remote side ──────────────────────────────────
@@ -143,13 +149,20 @@ export const CallPage: React.FC = () => {
   useEffect(() => {
     if (room?.status === "ended" && callState.status !== "ended") {
       hangUp();
-      navigate("/lobby");
     }
-  }, [room?.status, callState.status, hangUp, navigate]);
+  }, [room?.status, callState.status, hangUp]);
 
   // ─── Render ───────────────────────────────────────────────────────────────
 
   if (!user) return <Navigate to="/" replace />;
+
+  if (room?.status === "ended" && activeStats) {
+    return (
+      <div className="fixed inset-0 bg-gray-950 flex items-center justify-center p-4">
+        <CallSummary room={room} stats={activeStats} />
+      </div>
+    );
+  }
 
   const canRecord =
     callState.status === "connected" && !!localStream && !!remoteStream;
@@ -164,14 +177,17 @@ export const CallPage: React.FC = () => {
       )}
 
       {/* Uploading Overlay */}
-      {recording.isUploading && (
+      {(recording.isUploading || isEndingLocally) && (
         <div className="absolute inset-0 z-40 flex items-center justify-center bg-gray-950/80 backdrop-blur-sm">
           <div className="flex flex-col items-center gap-4">
             <Spinner size="lg" />
-            <p className="text-white/70 text-sm">Saving recording…</p>
+            <p className="text-white/70 text-sm">
+              {recording.isUploading ? "Saving recording…" : "Ending session…"}
+            </p>
           </div>
         </div>
       )}
+      {/* ... rest of the component remains the same ... */}
 
       {/* Video — flex-1 so controls stay below in flow */}
       <div className="flex-1 min-h-0 relative">

@@ -98,9 +98,17 @@ export interface ItemDetectionCounts {
   smartwatch: number;
 }
 
+export interface NetworkStats {
+  packetsLost: number;
+  jitter: number;
+  roundTripTime: number;
+  bitrateKbps: number;
+}
+
 export interface InterviewStats {
   candidateName: string;
   engagementLevel: number; // 0-100
   eventLog: EventLogEntry[];
   itemDetection: ItemDetectionCounts;
+  networkStats?: NetworkStats;
 }

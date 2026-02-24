@@ -33,6 +33,12 @@ interface UseWebRTCReturn {
   toggleCamera: () => void;
   startCall: () => Promise<void>;
   hangUp: () => void;
+  getNetworkStats: () => Promise<{
+    packetsLost: number;
+    jitter: number;
+    roundTripTime: number;
+    bitrateKbps: number;
+  } | null>;
 }
 
 export const useWebRTC = ({
@@ -204,6 +210,10 @@ export const useWebRTC = ({
     });
   }, [localStream, remoteStream, stopDurationTimer]);
 
+  const getNetworkStats = useCallback(async () => {
+    return (await serviceRef.current?.getNetworkStats()) ?? null;
+  }, []);
+
   // ─── Media Controls ───────────────────────────────────────────────────────
 
   const toggleMic = useCallback(() => {
@@ -251,5 +261,6 @@ export const useWebRTC = ({
     toggleCamera,
     startCall,
     hangUp,
+    getNetworkStats,
   };
 };

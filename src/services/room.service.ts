@@ -119,6 +119,14 @@ export const roomService = {
       status: "active" as RoomStatus,
     });
 
+    // Log the start of the session
+    await this.addEventLog(roomId, {
+      timestamp: new Date().toLocaleTimeString(),
+      description: "Interview session started",
+      severity: "normal",
+      eventType: "session_start",
+    });
+
     return sessionId;
   },
 
@@ -147,6 +155,14 @@ export const roomService = {
       endedAt: serverTimestamp(),
       duration,
       ...(recordingUrl ? { recordingUrl } : {}),
+    });
+
+    // Log the end of the session
+    await this.addEventLog(roomId, {
+      timestamp: new Date().toLocaleTimeString(),
+      description: `Interview session ended. Duration: ${duration}s`,
+      severity: "normal",
+      eventType: "session_end",
     });
   },
 

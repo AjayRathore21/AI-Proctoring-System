@@ -258,4 +258,47 @@ export class WebRTCService {
   getConnectionState(): RTCPeerConnectionState | null {
     return this.pc?.connectionState ?? null;
   }
+
+  async getNetworkStats(): Promise<{
+    packetsLost: number;
+    jitter: number;
+    roundTripTime: number;
+    bitrateKbps: number;
+  } | null> {
+    if (!this.pc) return null;
+
+    try {
+      const stats = await this.pc.getStats();
+      let packetsLost = 0;
+      let jitter = 0;
+      let roundTripTime = 0;
+      let bitrateKbps = 0;
+
+      stats.forEach((report) => {
+        if (report.type === "inbound-rtp" && report.kind === "video") {
+          packetsLost = report.packetsLost || 0;
+          jitter = report.jitter || 0;
+        }
+        if (
+          report.type === "remote-candidate-pair" &&
+          report.state === "succeeded"
+        ) {
+          roundTripTime = report.currentRoundTripTime || 0;
+        }
+        if (report.type === "candidate-pair" && report.state === "succeeded") {
+          bitrateKbps = Math.round((report.bytesReceived * 8) / 1000 / 60); // Simplified average
+        }
+      });
+
+      return {
+        packetsLost,
+        jitter: parseFloat(jitter.toFixed(4)),
+        roundTripTime: parseFloat(roundTripTime.toFixed(4)),
+        bitrateKbps,
+      };
+    } catch (err) {
+      console.error("[WebRTCService] Error getting stats:", err);
+      return null;
+    }
+  }
 }
