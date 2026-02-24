@@ -39,6 +39,7 @@ export interface Room {
   duration: number | null; // seconds
   status: RoomStatus;
   recordingUrl: string | null;
+  createdAt: number | null;
 }
 
 // ─── Session ─────────────────────────────────────────────────────────────────

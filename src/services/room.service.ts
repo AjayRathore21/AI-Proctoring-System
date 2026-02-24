@@ -20,6 +20,11 @@ import {
   serverTimestamp,
   Timestamp,
   DocumentSnapshot,
+  query,
+  where,
+  getDocs,
+  orderBy,
+  limit,
 } from "firebase/firestore";
 import { v4 as uuidv4 } from "uuid";
 import { db } from "./firebase.service";
@@ -54,6 +59,10 @@ const toRoom = (snap: DocumentSnapshot): Room | null => {
     duration: data.duration ?? null,
     status: (data.status as RoomStatus) ?? "waiting",
     recordingUrl: data.recordingUrl ?? null,
+    createdAt:
+      data.createdAt instanceof Timestamp
+        ? data.createdAt.toMillis()
+        : (data.createdAt ?? null),
   };
 };
 
@@ -68,7 +77,7 @@ export const roomService = {
     const roomId = uuidv4();
     const roomRef = doc(collection(db, ROOMS_COLLECTION), roomId);
 
-    const roomData: Omit<Room, "roomId"> = {
+    const roomData = {
       createdBy,
       joinedBy: null,
       sessionId: null,
@@ -77,6 +86,7 @@ export const roomService = {
       duration: null,
       status: "waiting",
       recordingUrl: null,
+      createdAt: serverTimestamp(),
     };
 
     await setDoc(roomRef, roomData);
@@ -323,5 +333,73 @@ export const roomService = {
         onUpdate(null);
       }
     });
+  },
+
+  /**
+   * Fetches all interviews (rooms) where the user was either the creator or joining participant.
+   * Also fetches the associated stats for each finished room.
+   */
+  async getUserInterviews(
+    uid: string,
+  ): Promise<Array<{ room: Room; stats: InterviewStats | null }>> {
+    const roomsRef = collection(db, ROOMS_COLLECTION);
+
+    // Query rooms created by user
+    const qCreated = query(
+      roomsRef,
+      where("createdBy", "==", uid),
+      orderBy("createdAt", "desc"),
+      limit(20),
+    );
+
+    // Query rooms joined by user
+    const qJoined = query(
+      roomsRef,
+      where("joinedBy", "==", uid),
+      orderBy("createdAt", "desc"),
+      limit(20),
+    );
+
+    const [snapCreated, snapJoined] = await Promise.all([
+      getDocs(qCreated),
+      getDocs(qJoined),
+    ]);
+
+    const allRoomSnaps = [...snapCreated.docs, ...snapJoined.docs];
+
+    // Deduplicate and sort
+    const uniqueRooms = Array.from(
+      new Map(allRoomSnaps.map((doc) => [doc.id, doc])).values(),
+    ).sort((a, b) => {
+      const timeA = a.data().createdAt?.toMillis() || 0;
+      const timeB = b.data().createdAt?.toMillis() || 0;
+      return timeB - timeA;
+    });
+
+    const results = await Promise.all(
+      uniqueRooms.map(async (roomSnap) => {
+        const room = toRoom(roomSnap)!;
+        let stats: InterviewStats | null = null;
+
+        // Only try to fetch stats if it was an active/ended room
+        if (room.status !== "waiting") {
+          const statsRef = doc(
+            db,
+            ROOMS_COLLECTION,
+            room.roomId,
+            "monitoring",
+            "stats",
+          );
+          const statsSnap = await getDoc(statsRef);
+          if (statsSnap.exists()) {
+            stats = statsSnap.data() as InterviewStats;
+          }
+        }
+
+        return { room, stats };
+      }),
+    );
+
+    return results;
   },
 };
