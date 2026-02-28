@@ -1,5 +1,72 @@
 # Architecture Overview
 
+## 🖼️ Visual System Architecture
+
+_Refined system architecture highlighting the Proctoring Workflow and P2P communication._
+
+```mermaid
+graph TD
+    %% 💎 High-End Professional Styles
+    classDef candidateNode fill:#f9fffb,stroke:#10b981,stroke-width:2px,rx:10,ry:10,color:#064e3b
+    classDef interviewerNode fill:#fcfaff,stroke:#a855f7,stroke-width:2px,rx:10,ry:10,color:#3b0764
+    classDef cloudNode fill:#f8faff,stroke:#3b82f6,stroke-width:2px,rx:10,ry:10,color:#172554
+    classDef webrtcNode fill:#fffbeb,stroke:#f59e0b,stroke-width:2px,rx:10,ry:10,color:#451a03
+
+    classDef aiCore fill:#10b981,stroke:#064e3b,color:#fff,font-weight:bold,rx:5,ry:5
+    classDef purpleCore fill:#7c3aed,stroke:#5b21b6,color:#fff,font-weight:bold,rx:5,ry:5
+    classDef standardNode fill:#fff,stroke:#cbd5e1,stroke-width:1px,rx:5,ry:5
+
+    %% 🟢 TOP: CANDIDATE ENVIRONMENT
+    subgraph Candidate_Env [Candidate Environment - Vite & React]
+        direction TB
+        MS[Media Stream API] --> TF
+        TF[AI Detection Engine: MediaPipe & TensorFlow COCO-SSD]
+        TF --> CV[Local Canvas Engine]
+    end
+
+    %% � MIDDLE LEFT: CLOUD SERVICES
+    subgraph Cloud_Env [Managed Cloud Services]
+        direction TB
+        CLD[Cloudinary Storage - Evidence]
+        FS[Firestore DB - Signaling & Logs]
+        AUTH[Firebase Auth - Identity]
+        CLD -.-> |Secure_URL| FS
+    end
+
+    %% � MIDDLE RIGHT: WEBRTC
+    subgraph WebRTC_Env [WebRTC P2P Connectivity]
+        direction TB
+        RTC_A[Candidate Stream] <--> P2P[P2P Video & Audio] <--> RTC_B[Interviewer Stream]
+    end
+
+    %% � BOTTOM: INTERVIEWER DASHBOARD
+    subgraph Interviewer_Env [Interviewer Dashboard - Admin Host]
+        direction LR
+        UI[Monitoring UI - Real-time Alerts]
+        REC[Summary Engine - Reporting]
+    end
+
+    %% 🔄 REAL-TIME DATA & WORKFLOW
+    CV -.-> |Cloudinary_Upload| CLD
+    TF -.-> |Violation_Metadata| FS
+    FS -.-> |Realtime_Snapshot| UI
+
+    TF --- RTC_A
+    RTC_B --- UI
+
+    %% Applying Premium Classes
+    class Candidate_Env candidateNode
+    class Cloud_Env cloudNode
+    class WebRTC_Env webrtcNode
+    class Interviewer_Env interviewerNode
+
+    class TF aiCore
+    class CLD purpleCore
+    class MS,CV,FS,AUTH,RTC_A,RTC_B,P2P,UI,REC standardNode
+```
+
+---
+
 ## 🏗️ Application Architecture
 
 This is a **layered architecture** with clear separation of concerns:
@@ -85,6 +152,7 @@ src/
 ## 🔄 Data Flow Architecture
 
 ### 1. **Authentication Flow**
+
 ```
 User → AuthPage → useAuthForm → authService → Firebase Auth
                                       ↓
@@ -94,6 +162,7 @@ User → AuthPage → useAuthForm → authService → Firebase Auth
 ```
 
 ### 2. **Room Creation Flow**
+
 ```
 LobbyPage → useRoom.createRoom() → roomService.createRoom()
                                       ↓
@@ -111,6 +180,7 @@ LobbyPage → useRoom.createRoom() → roomService.createRoom()
 ### **Phase 1: Initialization**
 
 #### **Caller Side (User A):**
+
 1. **LobbyPage** → User clicks "Create Room"
    - `useRoom.createRoom()` → Creates Firestore document
    - Navigates to `/call/{roomId}?role=caller`
@@ -134,6 +204,7 @@ LobbyPage → useRoom.createRoom() → roomService.createRoom()
    ```
 
 #### **Callee Side (User B):**
+
 1. **LobbyPage** → User enters roomId and clicks "Join"
    - `useRoom.joinRoom(roomId)` → Updates Firestore:
      - Sets `joinedBy`, `sessionId`, `startedAt`
@@ -156,19 +227,19 @@ LobbyPage → useRoom.createRoom() → roomService.createRoom()
 const startCall = async () => {
   // 1. Create WebRTCService instance
   const service = new WebRTCService(roomId);
-  
+
   // 2. Create RTCPeerConnection
   service.createPeerConnection(handleRemoteStream);
   //    ↓ Creates: new RTCPeerConnection({ iceServers: STUN_SERVERS })
   //    ↓ Sets up: pc.ontrack handler for incoming remote media
-  
+
   // 3. Add local tracks to peer connection
   service.addTracks(localStream);
   //    ↓ Adds camera + microphone tracks to RTCPeerConnection
-  
+
   // 4. Create and send offer (caller initiates)
   await service.createOffer();
-}
+};
 ```
 
 #### **Inside `createOffer()` (WebRTCService):**
@@ -186,22 +257,22 @@ async createOffer() {
       sdpMLineIndex: candidate.sdpMLineIndex,
     });
   };
-  
+
   // STEP 2: Create SDP offer
   const offer = await this.pc.createOffer();
   //    ↓ Browser generates SDP with media capabilities
-  
+
   // STEP 3: Set local description (triggers ICE gathering)
   await this.pc.setLocalDescription(offer);
   //    ↓ ICE gathering starts automatically
-  
+
   // STEP 4: Write offer to Firestore (signaling channel)
   await setDoc(SIGNAL_DOC_PATH(roomId), {
     offer: { type: offer.type, sdp: offer.sdp },
     answer: null,
   });
   //    ↓ Firestore: /rooms/{roomId}/signal/data
-  
+
   // STEP 5: Listen for answer from callee
   onSnapshot(SIGNAL_DOC_PATH(roomId), async (snap) => {
     const data = snap.data();
@@ -211,7 +282,7 @@ async createOffer() {
       );
     }
   });
-  
+
   // STEP 6: Listen for callee ICE candidates
   onSnapshot(CALLEE_CANDIDATES_PATH(roomId), (snap) => {
     snap.docChanges().forEach(async (change) => {
@@ -236,10 +307,10 @@ const startCall = async () => {
   const service = new WebRTCService(roomId);
   service.createPeerConnection(handleRemoteStream);
   service.addTracks(localStream);
-  
+
   // But creates ANSWER instead
   await service.createAnswer();
-}
+};
 ```
 
 #### **Inside `createAnswer()` (WebRTCService):**
@@ -256,27 +327,27 @@ async createAnswer() {
       sdpMLineIndex: candidate.sdpMLineIndex,
     });
   };
-  
+
   // STEP 2: Read offer from Firestore
   const signalSnap = await getDoc(SIGNAL_DOC_PATH(roomId));
   const { offer } = signalSnap.data();
-  
+
   // STEP 3: Set remote description (caller's offer)
   await this.pc.setRemoteDescription(
     new RTCSessionDescription(offer)
   );
-  
+
   // STEP 4: Create SDP answer
   const answer = await this.pc.createAnswer();
-  
+
   // STEP 5: Set local description (triggers ICE gathering)
   await this.pc.setLocalDescription(answer);
-  
+
   // STEP 6: Write answer back to Firestore
   await updateDoc(SIGNAL_DOC_PATH(roomId), {
     answer: { type: answer.type, sdp: answer.sdp },
   });
-  
+
   // STEP 7: Listen for caller ICE candidates
   onSnapshot(CALLER_CANDIDATES_PATH(roomId), (snap) => {
     snap.docChanges().forEach(async (change) => {
@@ -295,6 +366,7 @@ async createAnswer() {
 ### **Phase 3: ICE Candidate Exchange**
 
 **Firestore Structure:**
+
 ```
 /rooms/{roomId}/
   └── signal/
@@ -310,6 +382,7 @@ async createAnswer() {
 ```
 
 **Flow:**
+
 1. **Caller** discovers ICE candidates → Writes to `callerCandidates/`
 2. **Callee** listens via `onSnapshot` → Calls `addIceCandidate()` on peer connection
 3. **Callee** discovers ICE candidates → Writes to `calleeCandidates/`
@@ -321,6 +394,7 @@ async createAnswer() {
 ### **Phase 4: Connection Established**
 
 **When connection succeeds:**
+
 1. `RTCPeerConnection.ontrack` fires (set up in `createPeerConnection`)
 2. Remote media tracks arrive → Added to `remoteStream`
 3. `handleRemoteStream()` callback invoked → Updates React state
@@ -414,11 +488,13 @@ CALLER SIDE                          FIRESTORE                    CALLEE SIDE
 ## 🎯 Key Design Patterns
 
 ### 1. **Separation of Concerns**
+
 - **Services**: Pure business logic, no React dependencies
 - **Hooks**: React-specific state management, bridge to services
 - **Components**: Presentation only, delegate to hooks
 
 ### 2. **Firestore as Signaling Channel**
+
 - WebRTC requires signaling to exchange SDP and ICE candidates
 - Instead of WebSocket server, uses Firestore real-time listeners
 - Firestore paths:
@@ -427,16 +503,19 @@ CALLER SIDE                          FIRESTORE                    CALLEE SIDE
   - `/rooms/{roomId}/signal/data/calleeCandidates/{id}` → Callee ICE
 
 ### 3. **Class-based WebRTCService**
+
 - Single stateful instance per call
 - Encapsulates RTCPeerConnection lifecycle
 - Easy to test (no React dependencies)
 
 ### 4. **React Hooks Pattern**
+
 - `useWebRTC`: Manages WebRTCService instance via `useRef`
 - `useRoom`: Manages Firestore subscriptions
 - `useRecording`: Manages MediaRecorder lifecycle
 
 ### 5. **Real-time Synchronization**
+
 - Firestore `onSnapshot` listeners for reactive updates
 - Room status changes trigger UI updates automatically
 - Both sides detect when call ends
@@ -474,6 +553,7 @@ Component Re-renders
 ---
 
 This architecture ensures:
+
 - ✅ **Testability**: Services can be tested independently
 - ✅ **Maintainability**: Clear separation of concerns
 - ✅ **Scalability**: Easy to add features without coupling
