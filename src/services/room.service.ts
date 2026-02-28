@@ -119,7 +119,11 @@ export const roomService = {
    * Marks the room as active, persists sessionId, and records the startedAt
    * timestamp. This is called exclusively by the joining participant (User B).
    */
-  async joinRoom(roomId: string, joiningUserId: string): Promise<string> {
+  async joinRoom(
+    roomId: string,
+    joiningUserId: string,
+    displayName?: string,
+  ): Promise<string> {
     const sessionId = uuidv4();
 
     await updateDoc(doc(db, ROOMS_COLLECTION, roomId), {
@@ -128,6 +132,15 @@ export const roomService = {
       startedAt: serverTimestamp(),
       status: "active" as RoomStatus,
     });
+
+    // Initialize stats with candidate name immediately to avoid "Unknown Candidate"
+    if (displayName) {
+      await this.updateInterviewStats(roomId, {
+        candidateName: displayName,
+        engagementLevel: 100,
+        eventLog: [],
+      });
+    }
 
     // Log the start of the session
     await this.addEventLog(roomId, {

@@ -170,63 +170,97 @@ export class WebRTCService {
     this.unsubscribers.push(candidatesUnsub);
   }
 
-  // ─── Callee Flow ──────────────────────────────────────────────────────────
-
   /**
    * Reads the offer from Firestore, creates an SDP answer, writes it back,
    * and begins collecting ICE candidates for the callee side.
+   *
+   * PRODUCTION READY: If the offer doesn't exist yet, it sets up a listener
+   * and waits for it, enabling late-join support.
    */
   async createAnswer(): Promise<void> {
     if (!this.pc) throw new Error("[WebRTCService] No PeerConnection.");
 
-    // Collect callee ICE candidates and push to Firestore.
-    this.pc.onicecandidate = async ({ candidate }) => {
-      if (!candidate) return;
-      const payload: IceCandidate = {
-        candidate: candidate.candidate,
-        sdpMid: candidate.sdpMid,
-        sdpMLineIndex: candidate.sdpMLineIndex,
+    const setupAnswer = async (offer: RTCSessionDescriptionInit) => {
+      if (!this.pc) return;
+
+      // Collect callee ICE candidates and push to Firestore.
+      this.pc.onicecandidate = async ({ candidate }) => {
+        if (!candidate) return;
+        const payload: IceCandidate = {
+          candidate: candidate.candidate,
+          sdpMid: candidate.sdpMid,
+          sdpMLineIndex: candidate.sdpMLineIndex,
+        };
+        await addDoc(CALLEE_CANDIDATES_PATH(this.roomId), payload);
       };
-      await addDoc(CALLEE_CANDIDATES_PATH(this.roomId), payload);
+
+      await this.pc.setRemoteDescription(new RTCSessionDescription(offer));
+
+      const answer = await this.pc.createAnswer();
+      if (!this.pc) return;
+      await this.pc.setLocalDescription(answer);
+
+      await updateDoc(SIGNAL_DOC_PATH(this.roomId), {
+        answer: { type: answer.type, sdp: answer.sdp },
+      });
+
+      // Listen for caller ICE candidates.
+      const candidatesUnsub = onSnapshot(
+        CALLER_CANDIDATES_PATH(this.roomId),
+        (snap) => {
+          snap.docChanges().forEach(async (change) => {
+            if (change.type === "added") {
+              const data = change.doc.data() as IceCandidate;
+              try {
+                await this.pc?.addIceCandidate(
+                  new RTCIceCandidate({
+                    candidate: data.candidate,
+                    sdpMid: data.sdpMid,
+                    sdpMLineIndex: data.sdpMLineIndex,
+                  }),
+                );
+              } catch (e) {
+                console.warn("[WebRTCService] Failed to add ICE candidate", e);
+              }
+            }
+          });
+        },
+      );
+      this.unsubscribers.push(candidatesUnsub);
     };
 
+    // 1. Initial check for existing offer
     const signalSnap = await getDoc(SIGNAL_DOC_PATH(this.roomId));
-    if (!this.pc) return;
-
-    if (!signalSnap.exists() || !signalSnap.data()?.offer) {
-      throw new Error("[WebRTCService] No offer found in Firestore.");
+    if (signalSnap.exists() && signalSnap.data()?.offer) {
+      await setupAnswer(signalSnap.data()!.offer);
+      return;
     }
 
-    const { offer } = signalSnap.data() as { offer: RTCSessionDescriptionInit };
-    await this.pc.setRemoteDescription(new RTCSessionDescription(offer));
-
-    const answer = await this.pc.createAnswer();
-    if (!this.pc) return;
-    await this.pc.setLocalDescription(answer);
-
-    await updateDoc(SIGNAL_DOC_PATH(this.roomId), {
-      answer: { type: answer.type, sdp: answer.sdp },
-    });
-
-    // Listen for caller ICE candidates.
-    const candidatesUnsub = onSnapshot(
-      CALLER_CANDIDATES_PATH(this.roomId),
-      (snap) => {
-        snap.docChanges().forEach(async (change) => {
-          if (change.type === "added") {
-            const data = change.doc.data() as IceCandidate;
-            await this.pc!.addIceCandidate(
-              new RTCIceCandidate({
-                candidate: data.candidate,
-                sdpMid: data.sdpMid,
-                sdpMLineIndex: data.sdpMLineIndex,
-              }),
-            );
+    // 2. Wait for offer if not present (Late Join Support)
+    console.log("[WebRTCService] Waiting for offer from caller...");
+    return new Promise((resolve, reject) => {
+      const unsub = onSnapshot(
+        SIGNAL_DOC_PATH(this.roomId),
+        async (snap) => {
+          if (!snap.exists() || !this.pc) return;
+          const data = snap.data();
+          if (data?.offer) {
+            unsub(); // Self-unsubscribe once offer is found
+            try {
+              await setupAnswer(data.offer);
+              resolve();
+            } catch (err) {
+              reject(err);
+            }
           }
-        });
-      },
-    );
-    this.unsubscribers.push(candidatesUnsub);
+        },
+        (err) => {
+          unsub();
+          reject(err);
+        },
+      );
+      this.unsubscribers.push(unsub);
+    });
   }
 
   // ─── Cleanup ──────────────────────────────────────────────────────────────

@@ -7,7 +7,6 @@ interface VideoGridProps {
   localStream: MediaStream | null;
   remoteStream: MediaStream | null;
   isConnecting: boolean;
-  remoteUserName?: string;
   /** The current user's role — sidebar is only shown when "interviewer" */
   userRole?: UserRole;
   /** Live interview monitoring stats — passed from CallPage */
@@ -58,7 +57,6 @@ export const VideoGrid: React.FC<VideoGridProps> = ({
   localStream,
   remoteStream,
   isConnecting,
-  remoteUserName,
   userRole,
   interviewStats,
   processedStream,
@@ -102,15 +100,15 @@ export const VideoGrid: React.FC<VideoGridProps> = ({
           <div className="absolute top-6 left-6 z-30 flex flex-col gap-2">
             <button
               onClick={() => setShowDetection(!showDetection)}
-              className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-all ${
+              className={`flex items-center gap-2 px-5 py-2.5 rounded-full text-sm font-bold transition-all backdrop-blur-md border ${
                 showDetection
-                  ? "bg-indigo-600 text-white shadow-lg shadow-indigo-500/30"
-                  : "bg-white/10 text-white/70 hover:bg-white/20 border border-white/10"
+                  ? "bg-indigo-600 text-white shadow-lg shadow-indigo-500/40 border-indigo-400"
+                  : "bg-black/60 text-white hover:bg-black/80 border-white/20"
               }`}
             >
               <div
-                className={`w-2 h-2 rounded-full ${
-                  showDetection ? "bg-white animate-pulse" : "bg-white/30"
+                className={`w-2.5 h-2.5 rounded-full ${
+                  showDetection ? "bg-white animate-pulse" : "bg-white/40"
                 }`}
               />
               {showDetection ? "Detection On" : "Show Detection"}
@@ -150,10 +148,8 @@ export const VideoGrid: React.FC<VideoGridProps> = ({
             {isConnecting ? (
               <>
                 <Spinner size="lg" />
-                <p className="text-white/60 text-sm">
-                  {remoteUserName
-                    ? `Waiting for ${remoteUserName} to connect…`
-                    : "Connecting…"}
+                <p className="text-white/60 text-sm font-medium animate-pulse">
+                  Waiting for participant…
                 </p>
               </>
             ) : (

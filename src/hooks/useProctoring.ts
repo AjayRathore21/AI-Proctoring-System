@@ -528,6 +528,16 @@ export const useProctoring = ({
         videoRef.current.srcObject = null;
         videoRef.current = null;
       }
+
+      // IMPORTANT: Stop the processed stream tracks (the clones)
+      if (processingCanvasRef.current) {
+        // captureStream is not always on the base type in some TS versions
+        const canvas = processingCanvasRef.current as HTMLCanvasElement & {
+          captureStream?: () => MediaStream;
+        };
+        const stream = canvas.captureStream?.();
+        stream?.getTracks().forEach((t) => t.stop());
+      }
       setProcessedStream(null);
     };
   }, [

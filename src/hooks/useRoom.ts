@@ -45,7 +45,8 @@ export const useRoom = (): UseRoomReturn => {
       const roomId = await roomService.createRoom(user.uid);
       return roomId;
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Failed to create room.";
+      const message =
+        err instanceof Error ? err.message : "Failed to create room.";
       setError(message);
       throw err;
     } finally {
@@ -55,35 +56,47 @@ export const useRoom = (): UseRoomReturn => {
 
   // ─── Join ────────────────────────────────────────────────────────────────
 
-  const joinRoom = useCallback(async (roomId: string): Promise<string> => {
-    if (!user) throw new Error("You must be signed in to join a room.");
-    setIsLoading(true);
-    setError(null);
-    try {
-      await roomService.validateRoom(roomId, user.uid);
-      const sessionId = await roomService.joinRoom(roomId, user.uid);
-      return sessionId;
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Failed to join room.";
-      setError(message);
-      throw err;
-    } finally {
-      setIsLoading(false);
-    }
-  }, [user]);
+  const joinRoom = useCallback(
+    async (roomId: string): Promise<string> => {
+      if (!user) throw new Error("You must be signed in to join a room.");
+      setIsLoading(true);
+      setError(null);
+      try {
+        await roomService.validateRoom(roomId, user.uid);
+        const sessionId = await roomService.joinRoom(
+          roomId,
+          user.uid,
+          user.displayName || user.email || "Candidate",
+        );
+        return sessionId;
+      } catch (err) {
+        const message =
+          err instanceof Error ? err.message : "Failed to join room.";
+        setError(message);
+        throw err;
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [user],
+  );
 
   // ─── End ─────────────────────────────────────────────────────────────────
 
-  const endRoom = useCallback(async (recordingUrl: string | null): Promise<void> => {
-    if (!room?.roomId || !room.startedAt) return;
-    setError(null);
-    try {
-      await roomService.endRoom(room.roomId, room.startedAt, recordingUrl);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Failed to end room.";
-      setError(message);
-    }
-  }, [room]);
+  const endRoom = useCallback(
+    async (recordingUrl: string | null): Promise<void> => {
+      if (!room?.roomId || !room.startedAt) return;
+      setError(null);
+      try {
+        await roomService.endRoom(room.roomId, room.startedAt, recordingUrl);
+      } catch (err) {
+        const message =
+          err instanceof Error ? err.message : "Failed to end room.";
+        setError(message);
+      }
+    },
+    [room],
+  );
 
   // ─── Subscribe ───────────────────────────────────────────────────────────
 
@@ -94,7 +107,7 @@ export const useRoom = (): UseRoomReturn => {
     unsubscribeRef.current = roomService.subscribeToRoom(
       roomId,
       (updatedRoom) => setRoom(updatedRoom),
-      (err) => setError(err.message)
+      (err) => setError(err.message),
     );
   }, []);
 

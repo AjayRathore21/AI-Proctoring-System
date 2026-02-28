@@ -1,4 +1,4 @@
-# VideoCall — Production-grade 1:1 WebRTC Video Calling System
+# ProctoHire — Production-grade 1:1 WebRTC Video Calling System
 
 A full-stack real-time video calling system built with React, TypeScript, Firebase, and WebRTC.
 
@@ -54,7 +54,7 @@ src/
 
 ```bash
 git clone <repo>
-cd videocall
+cd ProctoHire
 npm install
 ```
 
@@ -78,6 +78,7 @@ VITE_FIREBASE_APP_ID=...
 ### 3. Enable Firebase Services
 
 In the Firebase Console:
+
 - **Authentication** → Email/Password sign-in method → Enable
 - **Firestore Database** → Create database (start in production mode)
 - **Storage** → Get started
@@ -123,28 +124,32 @@ Recording starts (both sides)
 
 ## Security Model
 
-| Concern | Solution |
-|---|---|
-| Unauthorized room access | Firestore rules: only `createdBy` + `joinedBy` can read/write |
-| Duplicate join prevention | `validateRoom()` checks `joinedBy` before writing |
-| Creator joining own room | Explicitly rejected in `validateRoom()` |
-| Expired rooms | Status check prevents joining `ended` rooms |
-| Recording storage | Firebase Storage rules: auth required, 500 MB limit |
+| Concern                   | Solution                                                      |
+| ------------------------- | ------------------------------------------------------------- |
+| Unauthorized room access  | Firestore rules: only `createdBy` + `joinedBy` can read/write |
+| Duplicate join prevention | `validateRoom()` checks `joinedBy` before writing             |
+| Creator joining own room  | Explicitly rejected in `validateRoom()`                       |
+| Expired rooms             | Status check prevents joining `ended` rooms                   |
+| Recording storage         | Firebase Storage rules: auth required, 500 MB limit           |
 
 ---
 
 ## Key Design Decisions
 
 ### Service Layer
+
 All async I/O lives in `services/`. Hooks are thin wrappers that add React lifecycle management. Components are purely presentational and receive only primitive props + callbacks.
 
 ### WebRTCService as a class
+
 Peer connections are stateful (they accumulate ICE candidates, SDP state, etc.). A class with private fields is the natural fit over a collection of standalone functions.
 
 ### Firestore as signaling server
+
 No separate signaling WebSocket server needed. Firestore's real-time listeners (`onSnapshot`) handle the offer/answer/ICE exchange reliably and scale automatically.
 
 ### Recording architecture
+
 Audio from both participants is mixed via `AudioContext.createMediaStreamDestination()`. Only the remote video track is recorded (PiP is a UI-only concern) to keep CPU usage low on client devices.
 
 ---

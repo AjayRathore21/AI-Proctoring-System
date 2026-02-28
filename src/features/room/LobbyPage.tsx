@@ -85,7 +85,7 @@ export const LobbyPage: React.FC = () => {
               />
             </svg>
           </div>
-          <span className="font-semibold text-white">VideoCall</span>
+          <span className="font-semibold text-white">ProctoHire</span>
         </div>
         <div className="flex items-center gap-3">
           <span className="text-sm text-white/50 hidden sm:block">

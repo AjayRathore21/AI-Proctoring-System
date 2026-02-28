@@ -165,7 +165,7 @@ const InterviewSidebar: React.FC<InterviewSidebarProps> = ({ stats }) => {
   };
 
   return (
-    <div className="w-80 bg-gray-900/95 backdrop-blur-xl border-l border-blue-500/30 shadow-2xl flex flex-col h-full overflow-hidden">
+    <div className="w-[450px] bg-gray-900/95 backdrop-blur-xl border-l border-blue-500/30 shadow-2xl flex flex-col h-full overflow-hidden">
       {/* Candidate Information Section */}
       <div className="p-4 border-b border-blue-500/20 bg-gradient-to-r from-blue-900/20 to-transparent">
         <div className="flex items-center gap-3 mb-3">

@@ -178,24 +178,26 @@ export const useWebRTC = ({
     }
   }, [localStream, roomId, role, handleRemoteStream]);
 
-  // ─── Hang Up ──────────────────────────────────────────────────────────────
-
   const hangUp = useCallback(() => {
     // Stop all local media tracks (camera and microphone)
-    if (localStream) {
-      localStream.getTracks().forEach((track) => {
-        track.stop();
-      });
-      setLocalStream(null);
-    }
+    const tracks =
+      localStream?.getTracks() || localStreamRef.current?.getTracks() || [];
+    tracks.forEach((track) => {
+      track.stop();
+      track.enabled = false;
+    });
+    setLocalStream(null);
+    localStreamRef.current = null;
 
     // Stop all remote media tracks
-    if (remoteStream) {
-      remoteStream.getTracks().forEach((track) => {
-        track.stop();
-      });
-      setRemoteStream(null);
-    }
+    const rTracks =
+      remoteStream?.getTracks() || remoteStreamRef.current?.getTracks() || [];
+    rTracks.forEach((track) => {
+      track.stop();
+      track.enabled = false;
+    });
+    setRemoteStream(null);
+    remoteStreamRef.current = null;
 
     // Close WebRTC connection
     serviceRef.current?.closeConnection();
@@ -239,11 +241,13 @@ export const useWebRTC = ({
       // Stop all local media tracks
       localStreamRef.current?.getTracks()?.forEach((track) => {
         track.stop();
+        track.enabled = false;
       });
 
       // Stop all remote media tracks
       remoteStreamRef.current?.getTracks()?.forEach((track) => {
         track.stop();
+        track.enabled = false;
       });
 
       // Close WebRTC connection
