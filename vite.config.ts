@@ -10,9 +10,7 @@ const useHttps = process.env.VITE_DEV_HTTPS === "1";
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react(), ...(useHttps ? [basicSsl()] : [])],
-  server: useHttps
-    ? { https: true, host: true }
-    : undefined,
+  server: (useHttps ? { https: true, host: true } : {}) as any, // eslint-disable-line @typescript-eslint/no-explicit-any
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
